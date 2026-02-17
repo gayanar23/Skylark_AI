@@ -307,8 +307,7 @@ textarea::placeholder{color:var(--muted);font-size:12px}
   </nav>
   <div class="tright">
     <div class="tpill"><div class="tdot"></div> Live</div>
-    <div class="tpill" id="or-pill" style="cursor:pointer" onclick="setupORKey()" title="Set OpenRouter API Key"><div class="tdot" id="or-dot" style="background:var(--err)"></div> <span id="or-label">⚙ Set API Key</span></div>
-    <div class="tpill" id="sync-pill" style="cursor:pointer" onclick="openSheetConfig()" title="Click to connect Google Sheets"><div class="tdot" id="sync-dot" style="background:var(--warn)"></div> <span id="sync-label">Sheets: Not Connected</span></div>
+    <div class="tpill"><div class="tdot" style="background:var(--ok)"></div> AI: Built-in ✓</div>
     <div class="tpill">👤 Ops Manager</div>
     <div class="ttime" id="ltime">--:--:--</div>
   </div>
@@ -549,211 +548,30 @@ textarea::placeholder{color:var(--muted);font-size:12px}
 
 <script>
 /* =====================================================================
-   GOOGLE SHEETS CONFIGURATION
-   Spreadsheet ID from your URL:
-   docs.google.com/spreadsheets/d/1iat2VaUXGccNjlGZPzPKuslKrovungEtOykSoSY83Xc
+   LIVE DATA STORE  (mirrors what would come from Google Sheets)
+   All mutations here = what would write back to Sheets in production
    ===================================================================== */
-const SHEET_ID = '1iat2VaUXGccNjlGZPzPKuslKrovungEtOykSoSY83Xc';
-const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
+let PILOTS = [
+  {id:'P001',name:'Arjun',  location:'Bangalore',skills:['Mapping','Survey'],      rate:1500,dgca:true, status:'Available',  assignment:null,assign_start:null,assign_end:null},
+  {id:'P002',name:'Neha',   location:'Mumbai',   skills:['Inspection'],            rate:3000,dgca:true, status:'Assigned',   assignment:'PRJ002',assign_start:'2026-02-07',assign_end:'2026-02-09'},
+  {id:'P003',name:'Rohit',  location:'Mumbai',   skills:['Inspection','Mapping'],  rate:1500,dgca:true, status:'Available',  assignment:null,assign_start:null,assign_end:null},
+  {id:'P004',name:'Sneha',  location:'Bangalore',skills:['Survey','Thermal'],      rate:5000,dgca:true, status:'Unavailable',assignment:null,assign_start:null,assign_end:null},
+];
 
-// Paste your Google API key here (get from console.cloud.google.com)
-let GAPI_KEY = localStorage.getItem('skylark_gapi_key') || '';
+let DRONES = [
+  {id:'D001',model:'DJI M300',    location:'Bangalore',weather:'IP43 (Rain)', caps:['LiDAR','RGB'],      status:'Available',  assignment:null},
+  {id:'D002',model:'DJI Mavic 3', location:'Mumbai',   weather:'None',       caps:['RGB'],              status:'Maintenance',assignment:null},
+  {id:'D003',model:'DJI Mavic 3T',location:'Mumbai',   weather:'None',       caps:['Thermal'],          status:'Available',  assignment:null},
+  {id:'D004',model:'Autel Evo II',location:'Bangalore',weather:'None',       caps:['Thermal','RGB'],    status:'Available',  assignment:null},
+];
 
-// Tab names exactly as in your Google Sheet
-const TAB_PILOTS   = 'Pilot_Roster';
-const TAB_DRONES   = 'Drone_Fleet';
-const TAB_MISSIONS = 'Missions';
+let MISSIONS = [
+  {id:'PRJ001',client:'Client A',location:'Bangalore',skills:'Mapping',   start:'2026-02-06',end:'2026-02-08',priority:'High',    weather:'Rainy', budget:10500,pilot:null,drone:null},
+  {id:'PRJ002',client:'Client B',location:'Mumbai',   skills:'Inspection',start:'2026-02-07',end:'2026-02-09',priority:'Urgent',  weather:'Sunny', budget:10500,pilot:null,drone:null},
+  {id:'PRJ003',client:'Client C',location:'Bangalore',skills:'Thermal',   start:'2026-02-10',end:'2026-02-12',priority:'Standard',weather:'Cloudy',budget:10500,pilot:null,drone:null},
+];
 
-/* =====================================================================
-   LIVE DATA STORE — loaded from your Google Sheets on startup
-   Exact columns from your sheet screenshots:
-   Pilot_Roster:  pilot_id | name | skills | certifications | location | status | current_assignment | available_from | daily_rate_inr
-   Drone_Fleet:   drone_id | model | capabilities | status | location | current_assignment | maintenance_due | weather_resistance
-   Missions:      project_id | client | location | required_skills | required_certs | start_date | end_date | priority | mission_budget | weather_forecast
-   ===================================================================== */
-let PILOTS = [];
-let DRONES = [];
-let MISSIONS = [];
 let CONFLICTS = [];
-let SHEETS_LOADED = false;
-
-/* ── SEED DATA from your Google Sheet (used as fallback if API key not set) ── */
-const SEED_PILOTS = [
-  {id:'P001',name:'Arjun',location:'Bangalore',skills:['Mapping','Survey'],rate:1500,dgca:true, status:'Available',  assignment:null,assign_start:null,assign_end:null,available_from:'2026-02-05'},
-  {id:'P002',name:'Neha', location:'Mumbai',   skills:['Inspection'],       rate:3000,dgca:true, status:'Assigned',   assignment:'Project-A',assign_start:null,assign_end:null,available_from:'2026-02-12'},
-  {id:'P003',name:'Rohit',location:'Mumbai',   skills:['Inspection','Mapping'],rate:1500,dgca:true, status:'Available', assignment:null,assign_start:null,assign_end:null,available_from:'2026-02-05'},
-  {id:'P004',name:'Sneha',location:'Bangalore',skills:['Survey','Thermal'], rate:5000,dgca:true, status:'Unavailable',assignment:null,assign_start:null,assign_end:null,available_from:'2026-02-15'},
-];
-const SEED_DRONES = [
-  {id:'D001',model:'DJI M300',   location:'Bangalore',weather:'IP43 (Rain)',caps:['LiDAR','RGB'],       status:'Available',  assignment:null,maintenance_due:'2026-03-01'},
-  {id:'D002',model:'DJI Mavic 3',location:'Mumbai',   weather:'None (Clear Sky Only)',caps:['RGB'],     status:'Maintenance',assignment:null,maintenance_due:'2026-02-01'},
-  {id:'D003',model:'DJI Mavic 3T',location:'Mumbai',  weather:'None (Clear Sky Only)',caps:['Thermal'], status:'Available',  assignment:null,maintenance_due:'2026-04-01'},
-  {id:'D004',model:'Autel Evo II',location:'Bangalore',weather:'None (Clear Sky Only)',caps:['Thermal','RGB'],status:'Available',assignment:null,maintenance_due:'2026-03-15'},
-];
-const SEED_MISSIONS = [
-  {id:'PRJ001',client:'Client A',location:'Bangalore',skills:'Mapping',  certs:'DGCA',      start:'2026-02-06',end:'2026-02-08',priority:'High',    weather:'Rainy',  budget:10500,pilot:null,drone:null},
-  {id:'PRJ002',client:'Client B',location:'Mumbai',   skills:'Inspection',certs:'DGCA, Night Ops',start:'2026-02-07',end:'2026-02-09',priority:'Urgent',weather:'Sunny',  budget:10500,pilot:null,drone:null},
-  {id:'PRJ003',client:'Client C',location:'Bangalore',skills:'Thermal',  certs:'DGCA',      start:'2026-02-10',end:'2026-02-12',priority:'Standard',weather:'Cloudy', budget:10500,pilot:null,drone:null},
-];
-
-/* =====================================================================
-   SHEETS READ — fetch all 3 tabs from your actual Google Sheet
-   ===================================================================== */
-async function loadFromSheets() {
-  if (!GAPI_KEY) {
-    useSeedData();
-    showToast('ℹ️ Using Sheet seed data. Enter API key to sync live.', 'info');
-    return;
-  }
-  showToast('🔄 Loading from Google Sheets…', 'info');
-  try {
-    const [pilotRes, droneRes, missionRes] = await Promise.all([
-      fetch(`${SHEETS_API}/${SHEET_ID}/values/${TAB_PILOTS}?key=${GAPI_KEY}`),
-      fetch(`${SHEETS_API}/${SHEET_ID}/values/${TAB_DRONES}?key=${GAPI_KEY}`),
-      fetch(`${SHEETS_API}/${SHEET_ID}/values/${TAB_MISSIONS}?key=${GAPI_KEY}`)
-    ]);
-    const [pd, dd, md] = await Promise.all([pilotRes.json(), droneRes.json(), missionRes.json()]);
-
-    if (pd.error || dd.error || md.error) {
-      const err = pd.error || dd.error || md.error;
-      showToast(`❌ Sheets API: ${err.message}`, 'error');
-      useSeedData(); return;
-    }
-
-    // Parse Pilot_Roster rows (skip header row 0)
-    // Columns: pilot_id|name|skills|certifications|location|status|current_assignment|available_from|daily_rate_inr
-    PILOTS = (pd.values || []).slice(1).map(r => ({
-      id:           r[0] || '',
-      name:         r[1] || '',
-      skills:       (r[2] || '').split(',').map(s => s.trim()).filter(Boolean),
-      dgca:         (r[3] || '').toUpperCase().includes('DGCA'),
-      location:     r[4] || '',
-      status:       r[5] || 'Available',
-      assignment:   r[6] && r[6] !== '-' ? r[6] : null,
-      available_from: r[7] || '',
-      rate:         parseInt((r[8] || '0').replace(/[^\d]/g,'')) || 0,
-      assign_start: null,
-      assign_end:   null
-    })).filter(p => p.id);
-
-    // Parse Drone_Fleet rows
-    // Columns: drone_id|model|capabilities|status|location|current_assignment|maintenance_due|weather_resistance
-    DRONES = (dd.values || []).slice(1).map(r => ({
-      id:             r[0] || '',
-      model:          r[1] || '',
-      caps:           (r[2] || '').split(',').map(s => s.trim()).filter(Boolean),
-      status:         r[3] || 'Available',
-      location:       r[4] || '',
-      assignment:     r[5] && r[5] !== '-' ? r[5] : null,
-      maintenance_due:r[6] || '',
-      weather:        r[7] || 'None'
-    })).filter(d => d.id);
-
-    // Parse Missions rows
-    // Columns: project_id|client|location|required_skills|required_certs|start_date|end_date|priority|mission_budget|weather_forecast
-    MISSIONS = (md.values || []).slice(1).map(r => ({
-      id:       r[0] || '',
-      client:   r[1] || '',
-      location: r[2] || '',
-      skills:   r[3] || '',
-      certs:    r[4] || '',
-      start:    r[5] || '',
-      end:      r[6] || '',
-      priority: r[7] || 'Standard',
-      budget:   parseInt((r[8] || '0').replace(/[^\d]/g,'')) || 0,
-      weather:  r[9] || 'Sunny',
-      pilot:    null,
-      drone:    null
-    })).filter(m => m.id);
-
-    SHEETS_LOADED = true;
-    showToast(`✅ Loaded from Google Sheets: ${PILOTS.length} pilots, ${DRONES.length} drones, ${MISSIONS.length} missions`, 'success');
-    refreshData();
-  } catch(e) {
-    showToast(`❌ Network error: ${e.message}`, 'error');
-    useSeedData();
-  }
-}
-
-function useSeedData() {
-  PILOTS   = JSON.parse(JSON.stringify(SEED_PILOTS));
-  DRONES   = JSON.parse(JSON.stringify(SEED_DRONES));
-  MISSIONS = JSON.parse(JSON.stringify(SEED_MISSIONS));
-  SHEETS_LOADED = false;
-  refreshData();
-}
-
-/* =====================================================================
-   SHEETS WRITE — update a single cell in your Google Sheet
-   Requires OAuth token (not just API key) for writes.
-   Falls back gracefully if not configured.
-   ===================================================================== */
-const OAUTH_TOKEN = localStorage.getItem('skylark_oauth_token') || '';
-
-async function writeToSheet(tab, cellRange, value) {
-  if (!GAPI_KEY || !OAUTH_TOKEN) return; // skip write if not configured
-  try {
-    await fetch(
-      `${SHEETS_API}/${SHEET_ID}/values/${tab}!${cellRange}?valueInputOption=RAW&key=${GAPI_KEY}`,
-      {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${OAUTH_TOKEN}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ values: [[value]] })
-      }
-    );
-  } catch(e) { /* silent fail — in-app state already updated */ }
-}
-
-/* Find row number in sheet for a given ID (1-indexed, +1 for header) */
-function pilotSheetRow(pid)   { return PILOTS.findIndex(p => p.id === pid) + 2; }
-function droneSheetRow(did)   { return DRONES.findIndex(d => d.id === did) + 2; }
-function missionSheetRow(mid) { return MISSIONS.findIndex(m => m.id === mid) + 2; }
-
-/* =====================================================================
-   API KEY / OAUTH SETUP MODAL
-   ===================================================================== */
-
-function setupORKey() {
-  const existing = localStorage.getItem('skylark_or_key') || '';
-  const key = prompt('Enter your OpenRouter API Key\n\nFREE signup at: openrouter.ai/keys\nClick Create Key → copy → paste here\n\nStarts with: sk-or-v1-...', existing);
-  if (key !== null) {
-    const trimmed = key.trim();
-    localStorage.setItem('skylark_or_key', trimmed);
-    updateORPill();
-    if(trimmed) showToast('✅ API key saved! AI chat is ready.', 'success');
-  }
-}
-
-function updateORPill() {
-  const key = localStorage.getItem('skylark_or_key') || '';
-  const dot = document.getElementById('or-dot');
-  const lbl = document.getElementById('or-label');
-  if(!dot) return;
-  if(key && key.length > 10) {
-    dot.style.background = 'var(--ok)';
-    lbl.textContent = 'AI: Ready ✓';
-  } else {
-    dot.style.background = 'var(--err)';
-    lbl.textContent = '⚙ Set API Key';
-  }
-}
-
-function openSheetConfig() {
-  const key = prompt('Enter your Google Sheets API Key (read-only)\nGet it from: console.cloud.google.com → APIs → Credentials', GAPI_KEY);
-  if (key !== null) {
-    GAPI_KEY = key.trim();
-    localStorage.setItem('skylark_gapi_key', GAPI_KEY);
-    loadFromSheets();
-  }
-}
-
-/* =====================================================================
-   ORIGINAL DATA STORE COMMENT (kept for reference)
-   All mutations here = what writes back to Sheets in production
-   ===================================================================== */
 
 /* =====================================================================
    BUSINESS LOGIC ENGINE
@@ -844,79 +662,7 @@ function detectConflicts(){
   return found;
 }
 
-/* =====================================================================
-   BUILD SYSTEM PROMPT WITH LIVE DATA
-   ===================================================================== */
-function buildSystemPrompt(){
-  const pilotsStr=PILOTS.map(p=>`• ${p.id}|${p.name}|${p.location}|Skills:${p.skills.join(',')}|₹${p.rate}/day|DGCA:${p.dgca?'YES':'NO'}|Status:${p.status}|Assignment:${p.assignment||'None'}|Dates:${p.assign_start||'—'}→${p.assign_end||'—'}`).join('\n');
-  const dronesStr=DRONES.map(d=>`• ${d.id}|${d.model}|${d.location}|Weather:${d.weather}|Caps:${d.caps.join(',')}|Status:${d.status}|Assignment:${d.assignment||'None'}`).join('\n');
-  const missionsStr=MISSIONS.map(m=>{
-    const days=calcDays(m.start,m.end);
-    return `• ${m.id}|${m.client}|${m.location}|Skills:${m.skills}|${m.start}→${m.end} (${days} days)|${m.priority}|${m.weather}|Budget:₹${m.budget.toLocaleString('en-IN')}|Pilot:${m.pilot||'UNASSIGNED'}|Drone:${m.drone||'UNASSIGNED'}`;
-  }).join('\n');
-  const conflictsStr=CONFLICTS.length?CONFLICTS.map(c=>`• [${c.severity.toUpperCase()}] ${c.type} | ${c.mission} | ${c.entity} | ${c.msg}`).join('\n'):'No active conflicts detected.';
 
-  return `You are Skylark OPS Intelligence — expert AI coordinator for an Indian drone operations company. You have LIVE access to the current operations data below. Data source: ${SHEETS_LOADED ? 'Google Sheets (live sync active)' : 'Seed data matching Google Sheet structure'}.
-
-═══════════════════════════════
-LIVE PILOTS DATA (${PILOTS.length} pilots):
-${pilotsStr}
-
-LIVE DRONES DATA (${DRONES.length} drones):
-${dronesStr}
-
-LIVE MISSIONS DATA (${MISSIONS.length} missions):
-${missionsStr}
-
-CURRENT CONFLICTS (${CONFLICTS.length}):
-${conflictsStr}
-═══════════════════════════════
-
-BUSINESS RULES YOU MUST APPLY:
-
-PILOT ELIGIBILITY for a mission:
-  ✅ status = "Available"
-  ✅ location = mission.location (exact city match)
-  ✅ skills includes mission.skills
-  ✅ dgca = true (DGCA certification mandatory for deployment)
-  ✅ NOT double-booked: dates must not overlap with existing assignment dates
-
-DRONE ELIGIBILITY for a mission:
-  ✅ status = "Available" (not Maintenance, not Deployed)
-  ✅ location = mission.location
-  ✅ caps includes mission.skills
-  ✅ If mission.weather = "Rainy" → drone.weather must be "IP43" or "IP53" (NOT "None")
-
-COST CALCULATION (always show full math):
-  days = (end_date - start_date) + 1
-  pilot_cost = days × pilot.rate
-  Budget check: pilot_cost vs mission.budget
-
-CONFLICT DETECTION (flag ALL of these, never suppress):
-  ❌ DOUBLE-BOOKING: pilot assigned to overlapping date ranges on 2+ missions
-  ❌ DGCA NON-COMPLIANCE: pilot.dgca = false
-  ❌ DRONE MAINTENANCE: drone.status = "Maintenance"
-  ❌ BUDGET OVERRUN: pilot_cost > mission.budget → Critical; > 80% budget → Warning
-  ❌ LOCATION MISMATCH: pilot.location ≠ mission.location OR drone.location ≠ mission.location
-  ❌ RAIN INCOMPATIBILITY: weather=Rainy + drone.weather="None"
-
-URGENT REASSIGNMENT PROTOCOL:
-  Trigger: mission.priority = "Urgent" or "High" AND pilot unavailable OR drone in maintenance
-  Response:
-    1. Alert immediately with 🚨
-    2. Auto-find all eligible alternatives in same city
-    3. Rank by: (a) skill match + DGCA ✅ (b) cost within budget (c) weather compatibility
-    4. Present ranked options with conflict analysis for each
-    5. Never leave Urgent/High mission unassigned
-
-RESPONSE FORMAT:
-  ✅ valid, ⚠️ warning, 🚨 critical/urgent, 💰 cost info, 📋 assignment summary
-  - Lead with direct recommendation
-  - Show full cost math: X days × ₹Y/day = ₹Z
-  - Flag ALL conflicts explicitly with ❌
-  - For assignments: show Pilot + Drone + Cost + Conflicts + Verdict
-  - Be decisive, professional, and complete`;
-}
 
 /* =====================================================================
    RENDER FUNCTIONS
@@ -1101,13 +847,11 @@ function refreshData(){
 function updatePilotStatus(pid, newStatus){
   const p=PILOTS.find(x=>x.id===pid);
   if(!p) return;
+  const old=p.status;
   p.status=newStatus;
   if(newStatus!=='Available'){p.assignment=null;p.assign_start=null;p.assign_end=null;}
-  // Pilot_Roster: status is column F (index 5), so column letter = F
-  const row = pilotSheetRow(pid);
-  writeToSheet(TAB_PILOTS, `F${row}`, newStatus).then(()=>{
-    showToast(`✅ ${p.name} → ${newStatus}${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync to Sheets)'}`, 'success');
-  });
+  showToast(`✅ ${p.name} → ${newStatus} (Syncing to Sheets…)`, 'success');
+  // ← In production: PATCH /api/pilots/{pid}/status or gspread.update_cell()
   refreshData();
 }
 
@@ -1116,11 +860,7 @@ function updateDroneStatus(did, newStatus){
   if(!d) return;
   d.status=newStatus;
   if(newStatus!=='Available') d.assignment=null;
-  // Drone_Fleet: status is column D (index 3)
-  const row = droneSheetRow(did);
-  writeToSheet(TAB_DRONES, `D${row}`, newStatus).then(()=>{
-    showToast(`✅ ${d.id} (${d.model}) → ${newStatus}${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync to Sheets)'}`, 'success');
-  });
+  showToast(`✅ ${d.id} (${d.model}) → ${newStatus} (Syncing to Sheets…)`, 'success');
   refreshData();
 }
 
@@ -1181,13 +921,7 @@ function confirmAssign(){
   const days=calcDays(m.start,m.end);
   const cost=days*p.rate;
   closeMo('mo-assign');
-  // Write assignment back to Sheets
-  const mrow=missionSheetRow(mid);
-  writeToSheet(TAB_MISSIONS,`I${mrow}`,p.name);
-  writeToSheet(TAB_MISSIONS,`J${mrow}`,d.id);
-  writeToSheet(TAB_PILOTS,`F${pilotSheetRow(p.id)}`,'Deployed');
-  writeToSheet(TAB_DRONES,`D${droneSheetRow(d.id)}`,'Deployed');
-  showToast(`✅ Assigned ${p.name} + ${d.id} to ${mid}. Cost: ₹${cost.toLocaleString('en-IN')}${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`, 'success');
+  showToast(`✅ Assigned ${p.name} + ${d.id} to ${mid}. Cost: ₹${cost.toLocaleString('en-IN')} (Syncing to Sheets…)`, 'success');
   // Let AI know about this assignment
   sq(`Mission ${mid} was just assigned: Pilot = ${p.name}, Drone = ${d.id}. Pilot cost = ${days} days × ₹${p.rate}/day = ₹${cost.toLocaleString('en-IN')}. Mission budget = ₹${m.budget.toLocaleString('en-IN')}. Confirm assignment is valid and flag any remaining conflicts.`);
   refreshData();
@@ -1211,7 +945,7 @@ function addMission(){
     pilot:null,drone:null
   });
   closeMo('mo-mission');
-  showToast(`✅ Mission ${id} added${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`,'success');
+  showToast(`✅ Mission ${id} added (Syncing to Sheets…)`,'success');
   refreshData();
 }
 
@@ -1226,7 +960,7 @@ function addDrone(){
     status:document.getElementById('nd-st').value,assignment:null
   });
   closeMo('mo-drone');
-  showToast(`✅ Drone ${id} added${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`,'success');
+  showToast(`✅ Drone ${id} added (Syncing to Sheets…)`,'success');
   refreshData();
 }
 
@@ -1243,7 +977,7 @@ function addPilot(){
     assignment:null,assign_start:null,assign_end:null
   });
   closeMo('mo-pilot');
-  showToast(`✅ Pilot ${name} added${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`,'success');
+  showToast(`✅ Pilot ${name} added (Syncing to Sheets…)`,'success');
   refreshData();
 }
 
@@ -1302,43 +1036,20 @@ setInterval(updateClock,1000);updateClock();
 /* =====================================================================
    CHAT ENGINE
    ===================================================================== */
-let history=[];
 let loading=false;
 
 function ares(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px';}
 function hkey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
-
-function sq(text){
-  switchTab('ai',document.querySelector('[data-tab=ai]'));
-  document.getElementById('uinput').value=text;
-  send();
-}
-
+function sq(text){switchTab('ai',document.querySelector('[data-tab=ai]'));document.getElementById('uinput').value=text;send();}
 function hideWelcome(){const w=document.getElementById('welcome');if(w)w.style.display='none';}
-
 function escH(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
 
-function fmtAI(t){
-  t=t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
-  t=t.replace(/\*(.+?)\*/g,'<em>$1</em>');
-  t=t.replace(/`([^`]+)`/g,'<code>$1</code>');
-  t=t.replace(/^#{1,3}\s+(.+)$/gm,'<div class="shdr">$1</div>');
-  t=t.replace(/^[-•*]\s+(.+)$/gm,'<li>$1</li>');
-  t=t.replace(/(<li>[\s\S]+?<\/li>)/g,m=>`<ul>${m}</ul>`);
-  t=t.replace(/^\d+\.\s+(.+)$/gm,'<li>$1</li>');
-  t=t.replace(/\n\n/g,'</p><p>');
-  t=t.replace(/\n/g,'<br>');
-  return `<p>${t}</p>`;
-}
-
-function appendMsg(role,content){
+function appendMsg(role,html){
   hideWelcome();
   const msgs=document.getElementById('messages');
   const div=document.createElement('div');
-  div.className=`msg ${role}`;
-  div.innerHTML=`<div class="av ${role}">${role==='ai'?'🤖':'👤'}</div>
-    <div class="bub"><div class="bname">${role==='ai'?'Skylark OPS AI':'You'}</div>
-    <div class="mtxt">${role==='ai'?fmtAI(content):escH(content)}</div></div>`;
+  div.className='msg '+role;
+  div.innerHTML='<div class="av '+role+'">'+(role==='ai'?'🤖':'👤')+'</div><div class="bub"><div class="bname">'+(role==='ai'?'Skylark OPS AI':'You')+'</div><div class="mtxt">'+(role==='ai'?html:escH(html))+'</div></div>';
   msgs.appendChild(div);
   msgs.scrollTop=msgs.scrollHeight;
   if(role==='user'){const c=document.getElementById('schips');if(c)c.style.display='none';}
@@ -1349,129 +1060,217 @@ function showTyping(){
   const msgs=document.getElementById('messages');
   const div=document.createElement('div');
   div.className='msg ai';div.id='typing';
-  div.innerHTML=`<div class="av ai">🤖</div><div class="typind"><div class="tdot2"></div><div class="tdot2"></div><div class="tdot2"></div></div>`;
+  div.innerHTML='<div class="av ai">🤖</div><div class="typind"><div class="tdot2"></div><div class="tdot2"></div><div class="tdot2"></div></div>';
   msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
 }
 function rmTyping(){const t=document.getElementById('typing');if(t)t.remove();}
 
-async function send(){
+/* =====================================================================
+   SKYLARK BUILT-IN AI — works offline, no API key, no installation
+   ===================================================================== */
+function skylarkAI(q){
+  const ql=q.toLowerCase();
+  detectConflicts();
+  const avP=PILOTS.filter(p=>p.status==='Available');
+  const avD=DRONES.filter(d=>d.status==='Available');
+  const openM=MISSIONS.filter(m=>!m.pilot||!m.drone);
+
+  function pc(p){
+    return '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;margin:4px 0"><strong style="color:var(--accent)">'+p.name+'</strong> ('+p.id+')<br>'+
+    '📍 '+p.location+' · 🛠 '+p.skills.join(', ')+' · 💰 ₹'+p.rate.toLocaleString('en-IN')+'/day<br>'+
+    (p.dgca?'<span style="color:var(--ok)">✅ DGCA</span>':'<span style="color:var(--err)">❌ No DGCA</span>')+
+    ' · <span style="color:'+(p.status==='Available'?'var(--ok)':'var(--warn)')+'">'+p.status+'</span>'+
+    (p.assignment?' · Mission: '+p.assignment:'')+
+    '</div>';
+  }
+  function dc(d){
+    const rain=d.weather.includes('IP');
+    return '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;margin:4px 0"><strong style="color:var(--accent)">'+d.id+'</strong> — '+d.model+'<br>'+
+    '📍 '+d.location+' · 🎯 '+d.caps.join(', ')+'<br>'+
+    (rain?'<span style="color:var(--ok)">🌧 Rain-Rated</span>':'<span style="color:var(--warn)">☀️ Clear Sky Only</span>')+
+    ' · <span style="color:'+(d.status==='Available'?'var(--ok)':d.status==='Maintenance'?'var(--err)':'var(--accent)')+'">'+d.status+'</span>'+
+    '</div>';
+  }
+  function mc(m){
+    const days=calcDays(m.start,m.end);
+    return '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;margin:4px 0"><strong style="color:var(--accent)">'+m.id+'</strong> — '+m.client+'<br>'+
+    '📍 '+m.location+' · 🛠 '+m.skills+' · 📅 '+m.start+' → '+m.end+' ('+days+' days)<br>'+
+    'Priority: <strong>'+m.priority+'</strong> · Weather: '+m.weather+' · Budget: <strong style="color:var(--ok)">₹'+m.budget.toLocaleString('en-IN')+'</strong><br>'+
+    'Pilot: '+(m.pilot?'<span style="color:var(--ok)">✅ '+m.pilot+'</span>':'<span style="color:var(--err)">Unassigned</span>')+
+    ' · Drone: '+(m.drone?'<span style="color:var(--ok)">✅ '+m.drone+'</span>':'<span style="color:var(--err)">Unassigned</span>')+
+    '</div>';
+  }
+  function bestMatch(mission){
+    const pilots=PILOTS.filter(p=>{
+      if(p.status!=='Available') return false;
+      if(p.location!==mission.location) return false;
+      if(!p.dgca) return false;
+      if(!p.skills.some(s=>s.toLowerCase().includes(mission.skills.toLowerCase())||mission.skills.toLowerCase().includes(s.toLowerCase()))) return false;
+      return calcDays(mission.start,mission.end)*p.rate<=mission.budget;
+    }).sort((a,b)=>a.rate-b.rate);
+    const drones=DRONES.filter(d=>{
+      if(d.status!=='Available') return false;
+      if(d.location!==mission.location) return false;
+      if(mission.weather==='Rainy'&&!d.weather.includes('IP')) return false;
+      return d.caps.some(c=>c.toLowerCase().includes(mission.skills.toLowerCase())||mission.skills.toLowerCase().includes(c.toLowerCase()));
+    });
+    return {pilots,drones};
+  }
+
+  // FLEET OVERVIEW
+  if(/fleet|overview/i.test(ql) && !/pilot|drone|mission/i.test(ql)){
+    return '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+
+      '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--ok)">'+avP.length+'</div><div style="font-size:9px;color:var(--muted);font-family:Space Mono,monospace">AVAILABLE PILOTS</div></div>'+
+      '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--accent)">'+avD.length+'</div><div style="font-size:9px;color:var(--muted);font-family:Space Mono,monospace">AVAILABLE DRONES</div></div>'+
+      '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--warn)">'+openM.length+'</div><div style="font-size:9px;color:var(--muted);font-family:Space Mono,monospace">OPEN MISSIONS</div></div>'+
+      '<div style="background:var(--surface2);border:1px solid var(--border2);border-radius:8px;padding:10px;text-align:center"><div style="font-size:22px;font-weight:800;color:var(--err)">'+CONFLICTS.length+'</div><div style="font-size:9px;color:var(--muted);font-family:Space Mono,monospace">CONFLICTS</div></div>'+
+      '</div>'+
+      (CONFLICTS.length?'<div style="background:var(--err-d);border-left:3px solid var(--err);border-radius:6px;padding:8px 12px;font-size:11px">⚠️ '+CONFLICTS.length+' conflict(s) detected — check Conflicts tab.</div>':'<div style="background:var(--ok-d);border-left:3px solid var(--ok);border-radius:6px;padding:8px 12px;font-size:11px">✅ All clear — no active conflicts.</div>')+
+      '<div style="font-size:11px;margin-top:8px"><strong>Available Pilots:</strong> '+(avP.map(p=>p.name).join(', ')||'None')+'<br><strong>Available Drones:</strong> '+(avD.map(d=>d.model).join(', ')||'None')+'<br><strong>Open Missions:</strong> '+(openM.map(m=>m.id).join(', ')||'All assigned')+'</div>';
+  }
+
+  // PILOTS
+  if(/pilot|roster|crew/i.test(ql) && !/assign|match/i.test(ql)){
+    const show=ql.includes('available')?avP:PILOTS;
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">🧑‍✈️ '+show.length+' Pilot(s)</div>'+show.map(pc).join('')+'</div>';
+  }
+
+  // DRONES
+  if(/drone|aircraft/i.test(ql) && !/assign|match/i.test(ql)){
+    const show=ql.includes('rain')?DRONES.filter(d=>d.weather.includes('IP')):ql.includes('available')?avD:DRONES;
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">🚁 '+show.length+' Drone(s)</div>'+show.map(dc).join('')+'</div>';
+  }
+
+  // MISSIONS
+  if(/mission|project|prj/i.test(ql) && !/assign|match|best/i.test(ql)){
+    const specific=MISSIONS.find(m=>ql.includes(m.id.toLowerCase()));
+    if(specific) return '<div>'+mc(specific)+'</div>';
+    const show=ql.includes('open')?openM:ql.includes('urgent')?MISSIONS.filter(m=>m.priority==='Urgent'||m.priority==='High'):MISSIONS;
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">📍 '+show.length+' Mission(s)</div>'+show.map(mc).join('')+'</div>';
+  }
+
+  // ASSIGN / BEST MATCH
+  if(/assign|best|match|who can|eligible/i.test(ql)){
+    const target=MISSIONS.find(m=>ql.includes(m.id.toLowerCase()))||openM[0];
+    if(!target) return '✅ All missions are already assigned!';
+    const {pilots,drones}=bestMatch(target);
+    const days=calcDays(target.start,target.end);
+    let out='<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">🎯 Best Match — '+target.id+'</div>'+mc(target);
+    out+='<div style="margin-top:8px"><strong>Eligible Pilots ('+pilots.length+'):</strong></div>';
+    out+=pilots.length?pilots.map(p=>{const cost=days*p.rate;return pc(p)+'<div style="font-size:11px;color:var(--text2);margin:-4px 0 6px 4px">💰 '+days+' days × ₹'+p.rate+'/day = <strong style="color:'+(cost<=target.budget?'var(--ok)':'var(--err)')+'">₹'+cost.toLocaleString('en-IN')+'</strong></div>';}).join(''):'<div style="color:var(--err);font-size:12px;padding:8px">❌ No eligible pilots in '+target.location+' with '+target.skills+'</div>';
+    out+='<div style="margin-top:6px"><strong>Eligible Drones ('+drones.length+'):</strong></div>';
+    out+=drones.length?drones.map(dc).join(''):'<div style="color:var(--err);font-size:12px;padding:8px">❌ No eligible drones in '+target.location+(target.weather==='Rainy'?' with rain rating':'')+'</div>';
+    if(pilots.length&&drones.length){const bp=pilots[0];const bd=drones[0];const cost=days*bp.rate;out+='<div style="background:var(--ok-d);border-left:3px solid var(--ok);border-radius:6px;padding:10px 14px;margin-top:10px;font-size:12px"><strong>✅ Recommendation:</strong> Pilot: <strong>'+bp.name+'</strong> + Drone: <strong>'+bd.model+'</strong><br>Cost: '+days+' days × ₹'+bp.rate+'/day = <strong>₹'+cost.toLocaleString('en-IN')+'</strong> of ₹'+target.budget.toLocaleString('en-IN')+' budget ('+Math.round(cost/target.budget*100)+'% used)</div>';}
+    return out+'</div>';
+  }
+
+  // CONFLICTS
+  if(/conflict|issue|dgca|double|rain|budget|overrun|maintenance|scan/i.test(ql)){
+    if(!CONFLICTS.length) return '<div style="background:var(--ok-d);border-left:3px solid var(--ok);border-radius:6px;padding:10px 14px;font-size:12px">✅ <strong>No conflicts detected!</strong> All clear — DGCA compliant, within budget, no double bookings.</div>';
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--err);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">⚠️ '+CONFLICTS.length+' Conflict(s)</div>'+
+    CONFLICTS.map(c=>'<div style="background:'+(c.severity==='Critical'?'var(--err-d)':'var(--warn-d)')+';border-left:3px solid '+(c.severity==='Critical'?'var(--err)':'var(--warn)')+';border-radius:6px;padding:9px 12px;margin:5px 0;font-size:12px"><strong>'+(c.severity==='Critical'?'🔴':'🟡')+' '+c.type+'</strong> — '+c.mission+'<br>'+c.msg+'</div>').join('')+'</div>';
+  }
+
+  // COST
+  if(/cost|rate|budget|price/i.test(ql)){
+    const mid=MISSIONS.find(m=>ql.includes(m.id.toLowerCase()));
+    const pid=PILOTS.find(p=>ql.toLowerCase().includes(p.name.toLowerCase()));
+    if(pid&&mid){const days=calcDays(mid.start,mid.end);const cost=days*pid.rate;const over=cost>mid.budget;
+      return '<div style="font-size:12px">💰 <strong>Cost Calculation</strong><br><br>Pilot: <strong>'+pid.name+'</strong> · ₹'+pid.rate+'/day<br>Mission: <strong>'+mid.id+'</strong> · '+days+' days<br><br><strong>'+days+' × ₹'+pid.rate+' = <span style="color:'+(over?'var(--err)':'var(--ok)')+'">₹'+cost.toLocaleString('en-IN')+'</span></strong><br>Budget: ₹'+mid.budget.toLocaleString('en-IN')+' · '+(over?'<span style="color:var(--err)">❌ Over by ₹'+(cost-mid.budget).toLocaleString('en-IN')+'</span>':'<span style="color:var(--ok)">✅ Within budget</span>')+'</div>';
+    }
+    return '<div>'+MISSIONS.map(m=>{const days=calcDays(m.start,m.end);const ep=PILOTS.filter(p=>p.location===m.location);return '<div style="font-size:11px;padding:6px 0;border-bottom:1px solid var(--border)"><strong style="color:var(--accent)">'+m.id+'</strong> · '+m.client+' · '+days+' days · Budget: ₹'+m.budget.toLocaleString('en-IN')+'<br>'+(ep.map(p=>{const c=days*p.rate;return p.name+': <strong style="color:'+(c<=m.budget?'var(--ok)':'var(--err)')+'">₹'+c.toLocaleString('en-IN')+'</strong>';}).join(' · ')||'No pilots in this city')+'</div>';}).join('')+'</div>';
+  }
+
+  // DGCA
+  if(/dgca|certif|compli/i.test(ql)){
+    const no=PILOTS.filter(p=>!p.dgca);const yes=PILOTS.filter(p=>p.dgca);
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">📋 DGCA Audit</div>'+
+    '<div style="background:var(--ok-d);border-left:3px solid var(--ok);border-radius:6px;padding:8px 12px;margin-bottom:6px;font-size:12px">✅ Certified ('+yes.length+'): '+yes.map(p=>p.name).join(', ')+'</div>'+
+    (no.length?'<div style="background:var(--err-d);border-left:3px solid var(--err);border-radius:6px;padding:8px 12px;font-size:12px">❌ Not Certified ('+no.length+'): '+no.map(p=>p.name).join(', ')+'</div>':'<div style="color:var(--ok);font-size:12px">✅ All pilots are DGCA certified!</div>')+'</div>';
+  }
+
+  // WEATHER
+  if(/weather|rain|cloud|sunny/i.test(ql)){
+    const rainyM=MISSIONS.filter(m=>m.weather==='Rainy');
+    const rainD=DRONES.filter(d=>d.weather.includes('IP'));
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--accent);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">🌧 Weather Risk</div>'+
+    '<strong>Rainy Missions ('+rainyM.length+'):</strong>'+
+    rainyM.map(m=>{const el=DRONES.filter(d=>d.location===m.location&&d.weather.includes('IP')&&d.status==='Available');return '<div style="background:var(--surface2);border-radius:6px;padding:8px 12px;margin:4px 0;font-size:11px"><strong style="color:var(--accent)">'+m.id+'</strong> · '+m.location+'<br>Rain-rated drones: '+(el.length?el.map(d=>d.model).join(', '):'<span style="color:var(--err)">❌ None available</span>')+'</div>';}).join('')+
+    '<div style="margin-top:8px"><strong>All Rain-Rated Drones ('+rainD.length+'):</strong></div>'+rainD.map(dc).join('')+'</div>';
+  }
+
+  // REPORT
+  if(/report|summary|analysis/i.test(ql)){
+    const total=MISSIONS.reduce((s,m)=>s+m.budget,0);
+    return '<div style="font-size:12px"><strong>📈 Operations Report</strong><br><br>'+
+    '<strong>Fleet:</strong> '+PILOTS.length+' pilots ('+avP.length+' available) · '+DRONES.length+' drones ('+avD.length+' available)<br>'+
+    '<strong>Missions:</strong> '+MISSIONS.length+' total · '+MISSIONS.filter(m=>m.pilot&&m.drone).length+' assigned · '+openM.length+' open · Budget: ₹'+total.toLocaleString('en-IN')+'<br>'+
+    '<strong>Conflicts:</strong> '+(CONFLICTS.length===0?'✅ None':'⚠️ '+CONFLICTS.length+' active')+'</div>';
+  }
+
+  // URGENT
+  if(/urgent|reassign|emergency/i.test(ql)){
+    const urg=MISSIONS.filter(m=>(m.priority==='Urgent'||m.priority==='High')&&(!m.pilot||!m.drone));
+    if(!urg.length) return '<div style="background:var(--ok-d);border-left:3px solid var(--ok);border-radius:6px;padding:10px">✅ No urgent unassigned missions.</div>';
+    return '<div><div style="font-family:Space Mono,monospace;font-size:9px;color:var(--err);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px">🚨 '+urg.length+' Urgent Mission(s)</div>'+urg.map(m=>{const {pilots,drones}=bestMatch(m);return mc(m)+(pilots[0]?'<div style="background:var(--adim);border-radius:6px;padding:8px 12px;margin:4px 0;font-size:11px">🎯 Best: <strong>'+pilots[0].name+'</strong> + <strong>'+(drones[0]?drones[0].model:'No drone')+'</strong></div>':'<div style="color:var(--err);font-size:11px;padding:4px">❌ No match found</div>');}).join('')+'</div>';
+  }
+
+  // HELLO / HELP
+  if(/hello|hi|help|what|how/i.test(ql)){
+    return '<div style="font-size:12px">👋 <strong>Skylark OPS — Built-in AI</strong><br><br>Works completely offline. Try: fleet overview · list pilots · available drones · show missions · best match PRJ001 · conflict scan · cost analysis · DGCA audit · weather risk · operations report</div>';
+  }
+
+
+  // DEFAULT
+  const relP=PILOTS.find(p=>ql.includes(p.name.toLowerCase()));
+  const relM=MISSIONS.find(m=>ql.includes(m.id.toLowerCase())||ql.includes(m.client.toLowerCase()));
+  if(relP) return pc(relP);
+  if(relM) return mc(relM);
+  return 'I can help with: <em>pilots, drones, missions, assign, conflicts, cost, DGCA, weather, urgent, report</em><br>Try: <strong>"Best match PRJ001"</strong> or <strong>"List all pilots"</strong>';
+}
+
+function send(){
   if(loading) return;
   const inp=document.getElementById('uinput');
   const text=inp.value.trim();
   if(!text) return;
   inp.value='';inp.style.height='auto';
   loading=true;document.getElementById('sbtn').disabled=true;
-
-  // Run a fresh conflict scan before every message so AI has latest data
   detectConflicts();
-
   appendMsg('user',text);
-  history.push({role:'user',content:text});
   showTyping();
-
-  try{
-    const orKey = localStorage.getItem('skylark_or_key') || '';
-    if(!orKey){
-      rmTyping();
-      appendMsg('ai',`<strong>🔑 One-time setup needed:</strong><br><br>
-1. Go to <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a> (free signup)<br>
-2. Click <strong>Create Key</strong> → copy it<br>
-3. Click <strong>⚙ Set API Key</strong> in the top bar → paste it<br><br>
-This is a free service. Works directly from your downloaded file with no server needed.`);
-      history.pop();
-      loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
-      return;
-    }
-    const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
-      method:'POST',
-      headers:{
-        'Content-Type':'application/json',
-        'Authorization':`Bearer ${orKey}`,
-        'HTTP-Referer':'https://skylarkops.local',
-        'X-Title':'Skylark OPS'
-      },
-      body:JSON.stringify({
-        model:'anthropic/claude-3-5-haiku',
-        max_tokens:1200,
-        messages:[
-          {role:'system', content:buildSystemPrompt()},
-          ...history
-        ]
-      })
-    });
-    const data=await res.json();
+  setTimeout(function(){
     rmTyping();
-
-    if(data.error){
-      appendMsg('ai',`❌ <strong>Error:</strong> ${data.error.message||JSON.stringify(data.error)}`);
-      history.pop();
-      loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
-      return;
-    }
-
-    const reply=data.choices?.[0]?.message?.content||'No response received. Please try again.';
-    history.push({role:'assistant',content:reply});
-    appendMsg('ai',reply);
-
-    // After AI responds, re-render data in case state changed
+    appendMsg('ai',skylarkAI(text));
     renderMissionsTable();renderPilotsTable();renderDronesTable();
     renderConflictBoard();renderDashboard();renderAlertFeed();renderSidebarCounts();
-
-  }catch(err){
-    rmTyping();
-    appendMsg('ai',`❌ <strong>Connection Error:</strong> ${err.message}<br><br>If you're opening this as a local file, try hosting it on a simple server or use <a href="https://claude.ai" style="color:var(--accent)">claude.ai</a> instead.`);
-    history.pop();
-  }
-
-  loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
+    loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
+  },350);
 }
 
 /* Close modals on overlay click */
 document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
+/* AI chip clicks */
+document.addEventListener('click',function(e){
+  if(e.target.classList.contains('ai-chip')){
+    var q=e.target.getAttribute('data-q');
+    if(q){document.getElementById('uinput').value=q;send();}
+  }
+});
+
 /* =====================================================================
    INIT
    ===================================================================== */
 (function init(){
-  // Update sync status pill
-  function updateSyncPill(){
-    const dot = document.getElementById('sync-dot');
-    const lbl = document.getElementById('sync-label');
-    if(SHEETS_LOADED){
-      dot.style.background='var(--ok)';
-      lbl.textContent='Sheets: Live ✓';
-    } else if(GAPI_KEY){
-      dot.style.background='var(--warn)';
-      lbl.textContent='Sheets: Key Set';
-    } else {
-      dot.style.background='var(--err)';
-      lbl.textContent='⚙ Connect Sheets';
-    }
-  }
-
-  // Override loadFromSheets to also update pill
-  const _orig = loadFromSheets;
-  window.loadFromSheets = async function(){
-    await _orig();
-    updateSyncPill();
-  };
-
-  // Boot: load data then render
-  loadFromSheets().then(()=>{
-    updateSyncPill();
-  });
-  updateORPill();
-
-
-
-  // Add sidebar "Connect Sheets" button
-  const sdiv = document.querySelector('.sidebar .sdiv:last-of-type');
-  if(sdiv){
-    const btn = document.createElement('div');
-    btn.style.cssText='padding:7px 11px';
-    btn.innerHTML=`<button onclick="openSheetConfig()" style="width:100%;background:var(--adim);border:1px solid var(--border2);border-radius:7px;padding:7px;color:var(--accent);font-family:Syne,sans-serif;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px">🔗 Connect Google Sheets</button>`;
-    sdiv.parentNode.insertBefore(btn, sdiv.nextSibling);
-  }
+  detectConflicts();
+  renderMissionsTable();
+  renderPilotsTable();
+  renderDronesTable();
+  renderConflictBoard();
+  renderDashboard();
+  renderAlertFeed();
+  renderSidebarCounts();
 })();
 </script>
 </body>
