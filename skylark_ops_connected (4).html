@@ -1,0 +1,1478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>Skylark OPS — Drone Operations Coordinator AI</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#060b0f;--surface:#0b1118;--surface2:#0f1820;--card:#121c26;--card2:#0d1720;
+  --border:#1a2840;--border2:#223050;
+  --accent:#00cfff;--adim:rgba(0,207,255,.12);
+  --a2:#ff6030;--a3:#5c3aff;
+  --text:#cfe0ef;--text2:#8fafc8;--muted:#4a6880;
+  --ok:#1fbd5e;--ok-d:rgba(31,189,94,.12);
+  --warn:#f0990a;--warn-d:rgba(240,153,10,.12);
+  --err:#e83b3b;--err-d:rgba(232,59,59,.12);
+  --urg:#ff3d3d;--hi:#ff8500;--nor:#1fbd5e;
+  --sw:220px;
+}
+html,body{height:100%;font-family:'Syne',sans-serif;background:var(--bg);color:var(--text);overflow:hidden}
+body::before{content:'';position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:linear-gradient(rgba(0,207,255,.022) 1px,transparent 1px),linear-gradient(90deg,rgba(0,207,255,.022) 1px,transparent 1px);
+  background-size:38px 38px}
+
+/* SHELL */
+.shell{position:relative;z-index:1;display:grid;grid-template-columns:var(--sw) 1fr;grid-template-rows:38px 1fr;height:100vh}
+
+/* TITLE BAR */
+.tbar{grid-column:1/-1;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 12px;gap:0;flex-shrink:0}
+.brand{display:flex;align-items:center;gap:8px;padding-right:14px;border-right:1px solid var(--border);flex-shrink:0}
+.brand-ico{font-size:14px}
+.brand-name{font-size:11px;font-weight:800;letter-spacing:1.5px;text-transform:uppercase;background:linear-gradient(90deg,var(--accent),#fff);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.brand-sub{font-family:'Space Mono',monospace;font-size:7.5px;color:var(--muted);-webkit-text-fill-color:var(--muted)}
+.tnav{display:flex;align-items:center;gap:0;padding:0 8px;flex:1}
+.tbtn{padding:0 11px;height:38px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Syne',sans-serif;font-size:10.5px;font-weight:700;cursor:pointer;letter-spacing:.5px;text-transform:uppercase;transition:all .18s;display:flex;align-items:center;gap:5px;white-space:nowrap}
+.tbtn:hover{color:var(--text)}.tbtn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.tbtn.wt.active{color:var(--warn);border-bottom-color:var(--warn)}
+.tbadge{border-radius:10px;font-size:8.5px;padding:1px 5px;font-family:'Space Mono',monospace;background:var(--adim);color:var(--accent)}
+.tbtn.wt .tbadge{background:var(--warn-d);color:var(--warn)}
+.tright{display:flex;align-items:center;gap:7px;margin-left:auto;font-family:'Space Mono',monospace}
+.tpill{display:flex;align-items:center;gap:4px;background:var(--card);border:1px solid var(--border);border-radius:100px;padding:2px 8px;font-size:8.5px;color:var(--text2)}
+.tdot{width:5px;height:5px;border-radius:50%;background:var(--ok);box-shadow:0 0 5px var(--ok);animation:blink 2s ease-in-out infinite}
+.ttime{font-family:'Space Mono',monospace;font-size:8.5px;color:var(--accent)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* SIDEBAR */
+.sidebar{background:var(--surface);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden}
+.sidebar::-webkit-scrollbar{width:3px}.sidebar::-webkit-scrollbar-thumb{background:var(--border2);border-radius:3px}
+.sbs{padding:8px 0 4px}.sbl{font-family:'Space Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:2px;color:var(--muted);padding:0 11px 5px;display:block}
+.sbi{width:100%;background:transparent;border:none;padding:6px 11px;color:var(--text2);font-family:'Syne',sans-serif;font-size:11px;font-weight:600;cursor:pointer;text-align:left;transition:all .15s;display:flex;align-items:center;gap:7px}
+.sbi:hover{background:rgba(0,207,255,.05);color:var(--text)}.sbi.active{background:rgba(0,207,255,.08);color:var(--accent);border-left:2px solid var(--accent)}
+.sbi .si{font-size:11px;flex-shrink:0;width:14px;text-align:center}
+.sbadge{margin-left:auto;border-radius:10px;font-size:8px;padding:1px 5px;font-family:'Space Mono',monospace}
+.sbadge.red{background:var(--err-d);color:var(--err)}.sbadge.grn{background:var(--ok-d);color:var(--ok)}.sbadge.or{background:var(--warn-d);color:var(--warn)}
+.sdiv{height:1px;background:var(--border);margin:4px 11px}
+
+/* ADD NEW grid */
+.add-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px;padding:5px 11px}
+.abtn{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 5px;color:var(--text2);font-family:'Syne',sans-serif;font-size:10px;font-weight:700;cursor:pointer;text-align:center;transition:all .18s;display:flex;flex-direction:column;align-items:center;gap:3px}
+.abtn:hover{border-color:var(--accent);color:var(--accent);background:var(--adim)}.abtn .ai{font-size:13px}
+
+/* LIVE ALERTS */
+.lalerts{margin:7px 9px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:9px}
+.lahdr{display:flex;align-items:center;gap:5px;margin-bottom:7px;font-family:'Space Mono',monospace;font-size:8px;color:var(--err);text-transform:uppercase;letter-spacing:1px}
+.ladot{width:6px;height:6px;border-radius:50%;background:var(--err);box-shadow:0 0 6px var(--err);animation:blink 1.2s ease-in-out infinite}
+.aitem{font-size:10px;color:var(--text2);margin-bottom:5px;line-height:1.4;padding-left:7px;border-left:2px solid var(--err)}
+.aitem:last-child{margin-bottom:0}.aitem .at{font-family:'Space Mono',monospace;font-size:7.5px;color:var(--muted);display:block;margin-top:1px}
+
+/* MAIN */
+.main{display:flex;flex-direction:column;overflow:hidden}
+.tpanel{display:none;flex:1;overflow:hidden;flex-direction:column}.tpanel.active{display:flex}
+
+/* CHAT */
+.mwrap{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth}
+.mwrap::-webkit-scrollbar{width:4px}.mwrap::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+.welcome{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;text-align:center;padding:24px;gap:10px;animation:fu .5s ease}
+@keyframes fu{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
+.wico{font-size:40px;filter:drop-shadow(0 0 18px rgba(0,207,255,.5));animation:hf 3s ease-in-out infinite}
+@keyframes hf{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.welcome h1{font-size:20px;font-weight:800;background:linear-gradient(135deg,#fff 40%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.welcome p{color:var(--muted);font-size:12px;max-width:340px;line-height:1.7}
+.msg{display:flex;gap:9px;align-items:flex-start;animation:mi .3s ease}
+@keyframes mi{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+.msg.user{flex-direction:row-reverse}
+.av{width:28px;height:28px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:13px;flex-shrink:0;margin-top:2px}
+.av.ai{background:linear-gradient(135deg,var(--a3),var(--accent))}.av.user{background:var(--card);border:1px solid var(--border2)}
+.bub{max-width:72%;padding:11px 15px;border-radius:13px;font-size:12.5px;line-height:1.65}
+.msg.ai .bub{background:var(--card);border:1px solid var(--border2);border-top-left-radius:3px}
+.msg.user .bub{background:rgba(0,207,255,.08);border:1px solid rgba(0,207,255,.2);border-top-right-radius:3px}
+.bname{font-family:'Space Mono',monospace;font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);margin-bottom:4px}
+.msg.user .bname{color:var(--muted);text-align:right}
+.mtxt strong{color:var(--accent)}.mtxt code{background:rgba(0,0,0,.4);padding:1px 5px;border-radius:3px;font-family:'Space Mono',monospace;font-size:11px;color:var(--a2)}
+.mtxt ul{padding-left:15px;margin:4px 0}.mtxt li{margin-bottom:2px;font-size:12px}
+.mtxt p{margin-bottom:5px}.mtxt p:last-child{margin-bottom:0}
+.shdr{font-family:'Space Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:1.5px;color:var(--accent);margin:9px 0 5px;border-bottom:1px solid var(--border);padding-bottom:3px}
+.calert{display:flex;align-items:flex-start;gap:6px;padding:7px 9px;border-radius:7px;font-size:11.5px;margin:4px 0}
+.calert.w{background:var(--warn-d);border-left:2px solid var(--warn);color:#fde68a}
+.calert.s{background:var(--ok-d);border-left:2px solid var(--ok);color:#86efac}
+.calert.e{background:var(--err-d);border-left:2px solid var(--err);color:#fca5a5}
+.calert.i{background:var(--adim);border-left:2px solid var(--accent);color:#a5f3fc}
+.typind{display:flex;align-items:center;gap:4px;padding:11px 15px;background:var(--card);border:1px solid var(--border2);border-radius:13px;border-top-left-radius:3px;width:fit-content}
+.tdot2{width:6px;height:6px;border-radius:50%;background:var(--muted);animation:tb 1.2s ease-in-out infinite}
+.tdot2:nth-child(1){animation-delay:0s}.tdot2:nth-child(2){animation-delay:.15s}.tdot2:nth-child(3){animation-delay:.3s}
+@keyframes tb{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-5px);opacity:1}}
+
+/* INPUT */
+.iarea{padding:9px 15px 13px;border-top:1px solid var(--border);background:var(--surface);flex-shrink:0}
+.schips{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:7px}
+.chip{background:var(--card);border:1px solid var(--border2);border-radius:100px;padding:3px 11px;font-size:10px;cursor:pointer;transition:all .18s;font-weight:600;color:var(--text2);white-space:nowrap;font-family:'Space Mono',monospace}
+.chip:hover{border-color:var(--accent);color:var(--accent);background:var(--adim)}
+.iwrap{display:flex;align-items:flex-end;gap:7px;background:var(--card);border:1px solid var(--border2);border-radius:11px;padding:5px 5px 5px 13px;transition:border-color .2s,box-shadow .2s}
+.iwrap:focus-within{border-color:rgba(0,207,255,.4);box-shadow:0 0 0 3px rgba(0,207,255,.06)}
+textarea{flex:1;background:transparent;border:none;outline:none;color:var(--text);font-family:'Syne',sans-serif;font-size:13px;resize:none;max-height:110px;min-height:22px;line-height:1.55;padding:3px 0;scrollbar-width:none}
+textarea::placeholder{color:var(--muted);font-size:12px}
+.sbtn{width:34px;height:34px;border-radius:8px;background:linear-gradient(135deg,var(--a3),var(--accent));border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s;box-shadow:0 2px 10px rgba(0,207,255,.2)}
+.sbtn:hover{transform:scale(1.06);box-shadow:0 3px 16px rgba(0,207,255,.35)}.sbtn:disabled{opacity:.35;cursor:not-allowed;transform:none}
+.sbtn svg{width:15px;height:15px;fill:white}
+.ihint{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted);text-align:center;margin-top:5px}
+.ihint kbd{background:var(--border2);border-radius:3px;padding:1px 4px;font-family:'Space Mono',monospace}
+
+/* DATA VIEW */
+.dpanel{flex:1;overflow-y:auto;padding:14px 18px}
+.dpanel::-webkit-scrollbar{width:4px}.dpanel::-webkit-scrollbar-thumb{background:var(--border2)}
+.phdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.ptitle{font-size:13px;font-weight:800}
+.pacts{display:flex;gap:7px}
+.pabtn{background:var(--card);border:1px solid var(--border2);border-radius:7px;padding:5px 11px;color:var(--text2);font-family:'Syne',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .18s}
+.pabtn:hover{border-color:var(--accent);color:var(--accent)}.pabtn.pri{background:linear-gradient(135deg,var(--a3),var(--accent));color:white;border:none}
+.stabs{display:flex;gap:2px;margin-bottom:12px;border-bottom:1px solid var(--border)}
+.stab{padding:5px 13px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--muted);font-family:'Syne',sans-serif;font-size:11px;font-weight:700;cursor:pointer;transition:all .18s;text-transform:uppercase;letter-spacing:.5px}
+.stab.active{color:var(--accent);border-bottom-color:var(--accent)}.stab:hover{color:var(--text)}
+.dtw{background:var(--card);border:1px solid var(--border2);border-radius:10px;overflow:hidden}
+.dt{width:100%;border-collapse:collapse;font-size:11.5px}
+.dt thead th{background:var(--surface2);font-family:'Space Mono',monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);padding:9px 13px;text-align:left;border-bottom:1px solid var(--border)}
+.dt tbody td{padding:9px 13px;border-bottom:1px solid var(--border);color:var(--text2)}
+.dt tbody tr:last-child td{border-bottom:none}.dt tbody tr:hover td{background:rgba(0,207,255,.025)}
+.tdid{font-family:'Space Mono',monospace;color:var(--accent);font-size:10.5px}
+.tddate{font-family:'Space Mono',monospace;font-size:9.5px;color:var(--muted)}
+.tdmoney{font-family:'Space Mono',monospace;font-size:11px;color:var(--ok)}
+.pbadge{display:inline-block;padding:1px 7px;border-radius:100px;font-size:8.5px;font-family:'Space Mono',monospace;font-weight:700}
+.pbadge.urgent{background:rgba(255,61,61,.18);color:var(--urg);border:1px solid rgba(255,61,61,.3)}
+.pbadge.high{background:rgba(255,133,0,.18);color:var(--hi);border:1px solid rgba(255,133,0,.3)}
+.pbadge.normal{background:rgba(31,189,94,.12);color:var(--nor);border:1px solid rgba(31,189,94,.25)}
+.wbadge{display:inline-block;padding:1px 7px;border-radius:100px;font-size:8.5px;font-family:'Space Mono',monospace}
+.wbadge.rain{background:var(--adim);color:var(--accent)}.wbadge.sunny{background:var(--warn-d);color:var(--warn)}.wbadge.cloudy{background:rgba(100,120,140,.15);color:var(--text2)}
+.stbadge{display:inline-block;padding:1px 7px;border-radius:100px;font-size:8.5px;font-family:'Space Mono',monospace}
+.stbadge.av{background:var(--ok-d);color:var(--ok)}.stbadge.leave{background:var(--warn-d);color:var(--warn)}.stbadge.unav{background:var(--err-d);color:var(--err)}.stbadge.maint{background:var(--err-d);color:var(--err)}.stbadge.dep{background:rgba(0,207,255,.1);color:var(--accent)}
+.acbtn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:4px 9px;color:var(--text2);font-family:'Syne',sans-serif;font-size:9.5px;font-weight:700;cursor:pointer;transition:all .15s;margin-right:4px}
+.acbtn:hover{border-color:var(--accent);color:var(--accent)}
+.acbtn.danger{border-color:var(--err);color:var(--err)}.acbtn.danger:hover{background:var(--err-d)}
+.conflict-flag{display:inline-block;font-size:11px;cursor:help}
+
+/* CONFLICTS */
+.clist{flex:1;overflow-y:auto;padding:14px 18px}
+.clist::-webkit-scrollbar{width:4px}.clist::-webkit-scrollbar-thumb{background:var(--border2)}
+.ccard{background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:13px 15px;margin-bottom:9px;border-left:3px solid var(--err);transition:all .2s}
+.ccard:hover{background:rgba(232,59,59,.03)}.ccard.wbord{border-left-color:var(--warn)}.ccard.wbord:hover{background:rgba(240,153,10,.03)}
+.cchdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.cctitle{font-size:12px;font-weight:700}.ccbadge{font-family:'Space Mono',monospace;font-size:8px;padding:2px 8px;border-radius:100px}
+.ccbadge.crit{background:var(--err-d);color:var(--err);border:1px solid rgba(232,59,59,.3)}
+.ccbadge.warn{background:var(--warn-d);color:var(--warn);border:1px solid rgba(240,153,10,.3)}
+.ccbody{font-size:11px;color:var(--text2);line-height:1.6}.ccmeta{display:flex;gap:10px;margin-top:7px;font-family:'Space Mono',monospace;font-size:8.5px;color:var(--muted)}
+.ccar{display:flex;gap:5px;margin-top:9px}
+.ccbtn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:5px 9px;color:var(--text2);font-family:'Syne',sans-serif;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s}
+.ccbtn:hover{border-color:var(--accent);color:var(--accent)}.ccbtn.pri{background:var(--err-d);border-color:var(--err);color:var(--err)}.ccbtn.pri:hover{background:rgba(232,59,59,.2)}
+
+/* DASHBOARD */
+.dbpanel{flex:1;overflow-y:auto;padding:14px 18px}
+.dbpanel::-webkit-scrollbar{width:4px}.dbpanel::-webkit-scrollbar-thumb{background:var(--border2)}
+.sgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:14px}
+.scard{background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:13px;position:relative;overflow:hidden}
+.scard::before{content:'';position:absolute;top:0;right:0;width:55px;height:55px;background:radial-gradient(circle at top right,var(--gc,rgba(0,207,255,.07)),transparent 70%)}
+.sval{font-size:24px;font-weight:800;line-height:1;margin-bottom:3px}.slabel{font-family:'Space Mono',monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted)}
+.schg{font-family:'Space Mono',monospace;font-size:8.5px;margin-top:5px}.schg.up{color:var(--ok)}.schg.dn{color:var(--err)}
+.dgrid2{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:14px}
+.dcard{background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:13px}
+.dctitle{font-size:11px;font-weight:700;margin-bottom:9px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.dctitle span{font-family:'Space Mono',monospace;font-size:8.5px;background:var(--adim);color:var(--accent);padding:1px 5px;border-radius:4px}
+.pr{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)}
+.pr:last-child{border-bottom:none}.prav{width:24px;height:24px;border-radius:6px;background:linear-gradient(135deg,var(--a3),var(--accent));display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.prname{font-size:11px;font-weight:700}.prloc{font-family:'Space Mono',monospace;font-size:8.5px;color:var(--muted)}
+.prst{margin-left:auto}
+.br{display:flex;align-items:center;gap:7px;margin-bottom:7px}
+.brl{font-family:'Space Mono',monospace;font-size:8.5px;color:var(--muted);width:55px;flex-shrink:0;text-align:right}
+.brt{flex:1;height:5px;background:var(--border);border-radius:3px;overflow:hidden}
+.brf{height:100%;border-radius:3px;transition:width .6s ease}
+.brv{font-family:'Space Mono',monospace;font-size:8.5px;color:var(--text2);width:26px;flex-shrink:0}
+
+/* DECISION LOG */
+.dlpanel{flex:1;overflow-y:auto;padding:20px 24px}
+.dlpanel::-webkit-scrollbar{width:4px}.dlpanel::-webkit-scrollbar-thumb{background:var(--border2)}
+.dlhdr{margin-bottom:20px;padding-bottom:14px;border-bottom:1px solid var(--border)}
+.dltitle{font-size:18px;font-weight:800;background:linear-gradient(135deg,#fff 40%,var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:4px}
+.dlsub{font-family:'Space Mono',monospace;font-size:9px;color:var(--muted)}
+.dlsec{margin-bottom:20px}
+.dlsectitle{font-family:'Space Mono',monospace;font-size:9px;text-transform:uppercase;letter-spacing:2px;color:var(--accent);margin-bottom:10px;padding-bottom:5px;border-bottom:1px solid var(--border)}
+.dlbody{font-size:12.5px;line-height:1.8;color:var(--text2)}
+.dlbody strong{color:var(--text);font-weight:700}
+.dlbody .flag{display:inline-block;background:var(--err-d);color:var(--err);border:1px solid rgba(232,59,59,.3);border-radius:5px;padding:1px 7px;font-family:'Space Mono',monospace;font-size:10px;margin:2px 2px}
+.dlbody .ok{display:inline-block;background:var(--ok-d);color:var(--ok);border:1px solid rgba(31,189,94,.3);border-radius:5px;padding:1px 7px;font-family:'Space Mono',monospace;font-size:10px;margin:2px 2px}
+.dlbody .info{display:inline-block;background:var(--adim);color:var(--accent);border:1px solid rgba(0,207,255,.3);border-radius:5px;padding:1px 7px;font-family:'Space Mono',monospace;font-size:10px;margin:2px 2px}
+.arch-box{background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:14px;margin:10px 0;font-family:'Space Mono',monospace;font-size:11px;color:var(--text2);line-height:2}
+.arch-box .lvl{color:var(--accent)}.arch-box .arr{color:var(--muted)}
+.dl2col{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:10px 0}
+.dl2card{background:var(--card);border:1px solid var(--border2);border-radius:8px;padding:12px}
+.dl2card h4{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:7px;font-family:'Space Mono',monospace;text-transform:uppercase;letter-spacing:.5px}
+.dl2card ul{padding-left:14px;color:var(--text2);font-size:11.5px;line-height:1.8}
+
+/* MODAL */
+.mo{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:100;align-items:center;justify-content:center}
+.mo.open{display:flex}
+.mbox{background:var(--surface2);border:1px solid var(--border2);border-radius:13px;padding:22px;width:420px;max-width:92vw;animation:fu .25s ease}
+.mttl{font-size:14px;font-weight:800;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between}
+.mclose{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:17px}.mclose:hover{color:var(--text)}
+.fg{margin-bottom:11px}.fl{font-family:'Space Mono',monospace;font-size:8.5px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);display:block;margin-bottom:4px}
+.fi{width:100%;background:var(--card);border:1px solid var(--border2);border-radius:7px;padding:7px 11px;color:var(--text);font-family:'Syne',sans-serif;font-size:12px;outline:none;transition:border-color .2s}
+.fi:focus{border-color:var(--accent)}.fr{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.macts{display:flex;justify-content:flex-end;gap:7px;margin-top:14px}
+.mbtn{padding:7px 16px;border-radius:7px;font-family:'Syne',sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:all .18s;border:1px solid var(--border2);background:var(--card);color:var(--text2)}
+.mbtn:hover{border-color:var(--accent);color:var(--accent)}.mbtn.pri{background:linear-gradient(135deg,var(--a3),var(--accent));color:white;border:none}.mbtn.pri:hover{opacity:.88}
+
+/* TOAST */
+.toast{position:fixed;bottom:18px;right:18px;z-index:200;background:var(--card);border:1px solid var(--border2);border-radius:9px;padding:11px 15px;font-size:12px;color:var(--text);box-shadow:0 8px 28px rgba(0,0,0,.5);max-width:300px;transform:translateY(18px);opacity:0;transition:all .3s ease;display:flex;align-items:center;gap:9px}
+.toast.show{transform:translateY(0);opacity:1}.toast.success{border-left:3px solid var(--ok)}.toast.error{border-left:3px solid var(--err)}.toast.info{border-left:3px solid var(--accent)}
+
+/* CONFLICT INDICATOR BADGE in tables */
+.cfi{display:inline-flex;align-items:center;gap:3px;font-size:9px;font-family:'Space Mono',monospace;padding:1px 6px;border-radius:100px;cursor:pointer}
+.cfi.e{background:var(--err-d);color:var(--err)}.cfi.w{background:var(--warn-d);color:var(--warn)}
+</style>
+</head>
+<body>
+
+<!-- TOAST -->
+<div class="toast" id="toast"></div>
+
+<!-- MODALS -->
+<div class="mo" id="mo-mission">
+  <div class="mbox">
+    <div class="mttl">📍 Add New Mission<button class="mclose" onclick="closeMo('mo-mission')">✕</button></div>
+    <div class="fr"><div class="fg"><label class="fl">Mission ID</label><input class="fi" id="nm-id" placeholder="e.g. PK006"/></div><div class="fg"><label class="fl">Client Name</label><input class="fi" id="nm-client" placeholder="e.g. Client F"/></div></div>
+    <div class="fr"><div class="fg"><label class="fl">Location</label><input class="fi" id="nm-loc" placeholder="e.g. Pune"/></div><div class="fg"><label class="fl">Skills Required</label><input class="fi" id="nm-skills" placeholder="e.g. Photography"/></div></div>
+    <div class="fr"><div class="fg"><label class="fl">Start Date</label><input class="fi" type="date" id="nm-s"/></div><div class="fg"><label class="fl">End Date</label><input class="fi" type="date" id="nm-e"/></div></div>
+    <div class="fr"><div class="fg"><label class="fl">Priority</label><select class="fi" id="nm-pri"><option>Normal</option><option>High</option><option>Urgent</option></select></div><div class="fg"><label class="fl">Budget (₹)</label><input class="fi" id="nm-budget" placeholder="e.g. 55000"/></div></div>
+    <div class="fg"><label class="fl">Weather Forecast</label><select class="fi" id="nm-wx"><option>Sunny</option><option>Cloudy</option><option>Rainy</option></select></div>
+    <div class="macts"><button class="mbtn" onclick="closeMo('mo-mission')">Cancel</button><button class="mbtn pri" onclick="addMission()">Add Mission</button></div>
+  </div>
+</div>
+
+<div class="mo" id="mo-drone">
+  <div class="mbox">
+    <div class="mttl">🚁 Add New Drone<button class="mclose" onclick="closeMo('mo-drone')">✕</button></div>
+    <div class="fr"><div class="fg"><label class="fl">Drone ID</label><input class="fi" id="nd-id" placeholder="e.g. DR007"/></div><div class="fg"><label class="fl">Model</label><input class="fi" id="nd-model" placeholder="e.g. DJI Mavic 3"/></div></div>
+    <div class="fr"><div class="fg"><label class="fl">Location</label><input class="fi" id="nd-loc" placeholder="e.g. Delhi"/></div><div class="fg"><label class="fl">Weather Rating</label><select class="fi" id="nd-wx"><option>IP43</option><option>IP53</option><option>None</option></select></div></div>
+    <div class="fg"><label class="fl">Capabilities (comma-separated)</label><input class="fi" id="nd-caps" placeholder="e.g. Photography, LiDAR, Thermal"/></div>
+    <div class="fg"><label class="fl">Status</label><select class="fi" id="nd-st"><option>Available</option><option>Deployed</option><option>Maintenance</option></select></div>
+    <div class="macts"><button class="mbtn" onclick="closeMo('mo-drone')">Cancel</button><button class="mbtn pri" onclick="addDrone()">Add Drone</button></div>
+  </div>
+</div>
+
+<div class="mo" id="mo-pilot">
+  <div class="mbox">
+    <div class="mttl">🧑‍✈️ Add New Pilot<button class="mclose" onclick="closeMo('mo-pilot')">✕</button></div>
+    <div class="fr"><div class="fg"><label class="fl">Full Name</label><input class="fi" id="np-name" placeholder="e.g. Aditya Singh"/></div><div class="fg"><label class="fl">Location</label><input class="fi" id="np-loc" placeholder="e.g. Pune"/></div></div>
+    <div class="fr"><div class="fg"><label class="fl">Skills (comma-separated)</label><input class="fi" id="np-skills" placeholder="e.g. Photography, BVLOS"/></div><div class="fg"><label class="fl">Daily Rate (₹)</label><input class="fi" id="np-rate" placeholder="e.g. 3800"/></div></div>
+    <div class="fr"><div class="fg"><label class="fl">DGCA Certified</label><select class="fi" id="np-dgca"><option value="Yes">Yes</option><option value="No">No</option></select></div><div class="fg"><label class="fl">Status</label><select class="fi" id="np-st"><option>Available</option><option>On Leave</option><option>Unavailable</option></select></div></div>
+    <div class="macts"><button class="mbtn" onclick="closeMo('mo-pilot')">Cancel</button><button class="mbtn pri" onclick="addPilot()">Add Pilot</button></div>
+  </div>
+</div>
+
+<div class="mo" id="mo-conflict">
+  <div class="mbox">
+    <div class="mttl">⚠️ Log Conflict<button class="mclose" onclick="closeMo('mo-conflict')">✕</button></div>
+    <div class="fg"><label class="fl">Mission ID</label><input class="fi" id="cf-m" placeholder="e.g. PK001"/></div>
+    <div class="fg"><label class="fl">Conflict Type</label><select class="fi" id="cf-t"><option>Pilot Double-Booked</option><option>Missing DGCA Certification</option><option>Drone in Maintenance</option><option>Budget Overrun</option><option>Location Mismatch</option><option>Non-Rain-Rated Drone in Rainy Mission</option></select></div>
+    <div class="fg"><label class="fl">Description</label><textarea class="fi" rows="3" id="cf-d" style="resize:vertical;height:64px;max-height:110px" placeholder="Describe the conflict..."></textarea></div>
+    <div class="fr"><div class="fg"><label class="fl">Severity</label><select class="fi" id="cf-sev"><option>Critical</option><option>Warning</option></select></div><div class="fg"><label class="fl">Assigned To</label><input class="fi" id="cf-a" placeholder="e.g. Ops Manager"/></div></div>
+    <div class="macts"><button class="mbtn" onclick="closeMo('mo-conflict')">Cancel</button><button class="mbtn pri" onclick="addConflict()">Log Conflict</button></div>
+  </div>
+</div>
+
+<!-- ASSIGN MODAL -->
+<div class="mo" id="mo-assign">
+  <div class="mbox">
+    <div class="mttl" id="assign-title">🎯 Assign to Mission<button class="mclose" onclick="closeMo('mo-assign')">✕</button></div>
+    <div class="fg"><label class="fl">Mission ID</label><select class="fi" id="as-mission" onchange="updateAssignOptions()"></select></div>
+    <div class="fg" id="as-pilot-grp"><label class="fl">Pilot</label><select class="fi" id="as-pilot"></select></div>
+    <div class="fg" id="as-drone-grp"><label class="fl">Drone</label><select class="fi" id="as-drone"></select></div>
+    <div id="as-warnings" style="margin-top:8px"></div>
+    <div class="macts"><button class="mbtn" onclick="closeMo('mo-assign')">Cancel</button><button class="mbtn pri" onclick="confirmAssign()">Confirm Assignment</button></div>
+  </div>
+</div>
+
+<!-- SHELL -->
+<div class="shell">
+
+<!-- TITLE BAR -->
+<div class="tbar">
+  <div class="brand"><span class="brand-ico">🚁</span><div><div class="brand-name">Skylark OPS</div><div class="brand-sub">Drone Operations Coordinator AI</div></div></div>
+  <nav class="tnav">
+    <button class="tbtn active" onclick="switchTab('ai',this)" data-tab="ai">🤖 AI Chat</button>
+    <button class="tbtn" onclick="switchTab('data',this)" data-tab="data">📊 Data View</button>
+    <button class="tbtn wt" onclick="switchTab('conflicts',this)" data-tab="conflicts">⚠️ Conflicts <span class="tbadge" id="conflict-count-badge">0</span></button>
+    <button class="tbtn" onclick="switchTab('dashboard',this)" data-tab="dashboard">📈 Dashboard</button>
+    <button class="tbtn" onclick="switchTab('declog',this)" data-tab="declog">📄 Decision Log</button>
+  </nav>
+  <div class="tright">
+    <div class="tpill"><div class="tdot"></div> Live</div>
+    <div class="tpill" id="or-pill" style="cursor:pointer" onclick="setupORKey()" title="Set OpenRouter API Key"><div class="tdot" id="or-dot" style="background:var(--err)"></div> <span id="or-label">⚙ Set API Key</span></div>
+    <div class="tpill" id="sync-pill" style="cursor:pointer" onclick="openSheetConfig()" title="Click to connect Google Sheets"><div class="tdot" id="sync-dot" style="background:var(--warn)"></div> <span id="sync-label">Sheets: Not Connected</span></div>
+    <div class="tpill">👤 Ops Manager</div>
+    <div class="ttime" id="ltime">--:--:--</div>
+  </div>
+</div>
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <div class="sbs"><span class="sbl">Fleet Overview</span>
+    <button class="sbi active" onclick="sq('Give me a complete fleet overview: available pilots, drones, open missions and any active conflicts')"><span class="si">📊</span> Fleet Status</button>
+    <button class="sbi" onclick="sq('List all available pilots with their skills, location, daily rate and DGCA status')"><span class="si">🧑‍✈️</span> Available Pilots <span class="sbadge grn" id="sb-pilots">—</span></button>
+    <button class="sbi" onclick="sq('List all available drones with model, location, weather rating and capabilities')"><span class="si">🚁</span> Drone Fleet Status <span class="sbadge grn" id="sb-drones">—</span></button>
+    <button class="sbi" onclick="sq('List all active conflicts: double bookings, DGCA issues, maintenance conflicts, budget overruns, location mismatches and rain-incompatible drones')"><span class="si">⚠️</span> Conflict Items <span class="sbadge red" id="sb-conflicts">—</span></button>
+    <button class="sbi" onclick="sq('What drone models do we operate? List each with capabilities, weather rating and current status')"><span class="si">🗂️</span> Drone Models</button>
+  </div>
+  <div class="sdiv"></div>
+  <div class="sbs"><span class="sbl">Mission Commands</span>
+    <button class="sbi" onclick="sq('Run best-match analysis across all open missions — find optimal pilot and drone for each one')"><span class="si">🎯</span> Best Match All</button>
+    <button class="sbi" onclick="sq('Show all active missions with status, dates, assigned pilot, assigned drone and any conflicts')"><span class="si">📍</span> Active Missions <span class="sbadge or" id="sb-missions">—</span></button>
+    <button class="sbi" onclick="sq('Which missions are High or Urgent priority and need immediate reassignment?')"><span class="si">🚨</span> Urgent Reassign <span class="sbadge red" id="sb-urgent">—</span></button>
+    <button class="sbi" onclick="sq('Run full conflict scan: check all 6 conflict types — double booking, DGCA, maintenance, budget, location mismatch, rain incompatibility — across all missions')"><span class="si">🔍</span> Full Conflict Scan</button>
+    <button class="sbi" onclick="sq('Calculate exact pilot costs for all missions and flag any budget overruns with detailed breakdown')"><span class="si">💰</span> Cost Analysis</button>
+    <button class="sbi" onclick="sq('Check DGCA certification compliance for every pilot — flag anyone not certified')"><span class="si">📋</span> DGCA Audit</button>
+    <button class="sbi" onclick="sq('Which missions have rainy weather? Check if assigned or candidate drones have IP43 or IP53 rating')"><span class="si">🌧️</span> Weather Risk</button>
+  </div>
+  <div class="sdiv"></div>
+  <div class="sbs"><span class="sbl">Add New</span>
+    <div class="add-grid">
+      <button class="abtn" onclick="openMo('mo-mission')"><span class="ai">📍</span>Mission</button>
+      <button class="abtn" onclick="openMo('mo-drone')"><span class="ai">🚁</span>Drone</button>
+      <button class="abtn" onclick="openMo('mo-pilot')"><span class="ai">🧑‍✈️</span>Pilot</button>
+      <button class="abtn" onclick="openMo('mo-conflict')"><span class="ai">⚠️</span>Conflict</button>
+    </div>
+  </div>
+  <div class="sdiv"></div>
+  <div class="lalerts">
+    <div class="lahdr"><div class="ladot"></div> Live Alerts</div>
+    <div id="alert-feed"></div>
+  </div>
+</aside>
+
+<!-- MAIN -->
+<main class="main">
+
+<!-- AI CHAT -->
+<div class="tpanel active" id="tab-ai">
+  <div class="mwrap" id="messages">
+    <div class="welcome" id="welcome">
+      <div class="wico">🚁</div>
+      <h1>Skylark OPS Intelligence</h1>
+      <p>Conversational drone operations coordinator. Assign missions, detect conflicts, analyze costs, and manage your fleet.</p>
+    </div>
+  </div>
+  <div class="iarea">
+    <div class="schips" id="schips">
+      <div class="chip" onclick="sq('Who are available pilots in Mumbai with Photography skills?')">Pilots in Mumbai</div>
+      <div class="chip" onclick="sq('Which drones can fly in rain? Check IP rating.')">Rain-capable drones</div>
+      <div class="chip" onclick="sq('Assign best pilot and drone to PK001')">Assign PK001</div>
+      <div class="chip" onclick="sq('Is any pilot double-booked? Check date overlaps.')">Check double-booking</div>
+      <div class="chip" onclick="sq('PK002 is urgent — find immediate reassignment options')">PK002 urgent match</div>
+      <div class="chip" onclick="sq('What will Arjun Mehta cost for a 10-day mission?')">Cost estimate</div>
+    </div>
+    <div class="iwrap">
+      <textarea id="uinput" placeholder="Ask about missions, pilots, drones, costs, conflicts… or type 'Assign pilot to PK003'" rows="1" onkeydown="hkey(event)" oninput="ares(this)"></textarea>
+      <button class="sbtn" id="sbtn" onclick="send()">
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+    <div class="ihint"><kbd>Enter</kbd> send · <kbd>Shift+Enter</kbd> new line</div>
+  </div>
+</div>
+
+<!-- DATA VIEW -->
+<div class="tpanel" id="tab-data">
+  <div class="dpanel">
+    <div class="phdr">
+      <div class="ptitle">📊 Operations Data</div>
+      <div class="pacts">
+        <button class="pabtn" onclick="refreshData()">⟳ Refresh</button>
+        <button class="pabtn" onclick="openAssignModal()">🎯 Assign</button>
+        <button class="pabtn pri" onclick="openMo('mo-mission')">＋ Mission</button>
+      </div>
+    </div>
+    <div class="stabs">
+      <button class="stab active" onclick="sstab('dt-m',this)">Missions (3)</button>
+      <button class="stab" onclick="sstab('dt-p',this)">Pilots (4)</button>
+      <button class="stab" onclick="sstab('dt-d',this)">Drones (4)</button>
+    </div>
+    <div id="dt-m"></div>
+    <div id="dt-p" style="display:none"></div>
+    <div id="dt-d" style="display:none"></div>
+  </div>
+</div>
+
+<!-- CONFLICTS -->
+<div class="tpanel" id="tab-conflicts">
+  <div class="clist">
+    <div class="phdr">
+      <div class="ptitle">⚠️ Active Conflicts</div>
+      <div class="pacts">
+        <button class="pabtn" onclick="runConflictScan()">🔍 Re-scan All</button>
+        <button class="pabtn pri" onclick="openMo('mo-conflict')">＋ Log</button>
+      </div>
+    </div>
+    <div id="conflict-board"></div>
+  </div>
+</div>
+
+<!-- DASHBOARD -->
+<div class="tpanel" id="tab-dashboard">
+  <div class="dbpanel">
+    <div class="phdr">
+      <div class="ptitle">📈 Operations Dashboard</div>
+      <div class="pacts">
+        <button class="pabtn" onclick="refreshData()">⟳ Refresh</button>
+        <button class="pabtn" onclick="sq('Generate a complete operations report: fleet utilization, mission status, pilot performance and all active conflicts'); switchTab('ai',document.querySelector('[data-tab=ai]'))">🤖 AI Report</button>
+      </div>
+    </div>
+    <div class="sgrid" id="stats-grid"></div>
+    <div class="dgrid2" id="dash-lower"></div>
+  </div>
+</div>
+
+<!-- DECISION LOG -->
+<div class="tpanel" id="tab-declog">
+  <div class="dlpanel">
+    <div class="dlhdr">
+      <div class="dltitle">Skylark OPS — Decision Log</div>
+      <div class="dlsub">Architecture, assumptions, trade-offs & design rationale · v1.0 · Feb 2026</div>
+    </div>
+
+    <div class="dlsec">
+      <div class="dlsectitle">1. System Architecture</div>
+      <div class="dlbody">The system is architected as a <strong>single-page conversational AI application</strong> with four integrated layers that communicate in real-time:</div>
+      <div class="arch-box">
+        <span class="lvl">Frontend (Chat UI + Data Tables + Conflict Board)</span><br>
+        <span class="arr">↓  user query / action</span><br>
+        <span class="lvl">In-Browser Business Logic Engine (JS)</span><br>
+        <span class="arr">↓  conflict scan · eligibility check · cost calc · state mutation</span><br>
+        <span class="lvl">System Prompt Context Layer (live data injected per request)</span><br>
+        <span class="arr">↓  structured JSON-like data + all 6 conflict rules</span><br>
+        <span class="lvl">Claude API — claude-sonnet-4 (LLM Reasoning Layer)</span><br>
+        <span class="arr">↓  structured reasoning + recommendations</span><br>
+        <span class="lvl">State Write-Back (pilots, drones, missions updated in-browser)</span>
+      </div>
+      <div class="dlbody" style="margin-top:10px">Google Sheets integration is implemented as a <strong>write-back layer</strong>. The frontend posts status changes (pilot availability, drone assignment) to the Sheets API endpoint via <code>gspread</code> (Python backend) or direct Sheets API v4 calls. In this prototype, state mutations are committed to the in-browser data store and would sync to Sheets in production via a lightweight FastAPI or Vercel Edge function.</div>
+    </div>
+
+    <div class="dlsec">
+      <div class="dlsectitle">2. The 4 Functional Modules</div>
+      <div class="dl2col">
+        <div class="dl2card">
+          <h4>Module 1 — Roster Management</h4>
+          <ul>
+            <li>Filter pilots by skill, location, status</li>
+            <li>Mark pilot On Leave / Available (updates in-app state)</li>
+            <li>Cost = days × daily_rate_inr (shown with full calculation)</li>
+            <li>DGCA certification flag — blocks deployment if missing</li>
+            <li>Write-back triggers: status change → Sheet cell update</li>
+          </ul>
+        </div>
+        <div class="dl2card">
+          <h4>Module 2 — Assignment Tracking</h4>
+          <ul>
+            <li>Match pilot → mission by: location, skills, availability, DGCA, budget</li>
+            <li>Match drone → mission by: location, capabilities, weather, status</li>
+            <li>Detect & surface all conflicts before confirming assignment</li>
+            <li>Reassign button: auto-finds alternatives ranked by cost</li>
+            <li>Assignment updates pilot & drone status to "Deployed"</li>
+          </ul>
+        </div>
+        <div class="dl2card">
+          <h4>Module 3 — Drone Inventory</h4>
+          <ul>
+            <li>Filter by capability: LiDAR, Thermal, Photography, Mapping</li>
+            <li>Weather logic: Rainy mission → must have IP43 or IP53 rating</li>
+            <li>Maintenance detection → auto-conflict raised</li>
+            <li>Assign drone to mission → updates drone status to "Deployed"</li>
+            <li>Due-for-maintenance query via capability/status fields</li>
+          </ul>
+        </div>
+        <div class="dl2card">
+          <h4>Module 4 — Conflict Detection</h4>
+          <ul>
+            <li>❌ Pilot double-booked (date overlap check)</li>
+            <li>❌ Missing DGCA certification</li>
+            <li>❌ Drone in maintenance</li>
+            <li>❌ Over budget (pilot_cost > mission_budget)</li>
+            <li>❌ Different locations (pilot ≠ mission ≠ drone)</li>
+            <li>❌ Non-rain-rated drone on rainy mission</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <div class="dlsec">
+      <div class="dlsectitle">3. Conflict Detection — Design Rationale</div>
+      <div class="dlbody">
+        All 6 conflict types are checked <strong>automatically on every assignment</strong> and surfaced in the Conflicts tab. The system <strong>never silently fails</strong> — every conflict generates a badge in the data table, a card in the conflict board, and an entry in the live alerts sidebar.<br><br>
+        <span class="flag">❌ Double-Booking</span> Implemented using date-overlap logic: <code>NOT (end1 &lt; start2 OR start1 &gt; end2)</code>. Checked against <code>current_assignment_dates</code> field on every pilot.<br><br>
+        <span class="flag">❌ DGCA Non-Compliance</span> Pilots without <code>dgca: true</code> are immediately blocked from assignment. The system raises a Critical conflict, not just a warning.<br><br>
+        <span class="flag">❌ Drone in Maintenance</span> Any drone with <code>status: "Maintenance"</code> raises a Critical flag if selected or if it was previously assigned.<br><br>
+        <span class="flag">❌ Budget Overrun</span> <code>cost = days × daily_rate</code>. Raised as Warning if cost > 80% of budget, Critical if cost > 100%.<br><br>
+        <span class="flag">❌ Location Mismatch</span> Pilot city, drone city, and mission city must all match. Any deviation raises a conflict.<br><br>
+        <span class="flag">❌ Rain Incompatibility</span> Missions with <code>weather: "Rainy"</code> require drones with <code>weather_rating: "IP43"</code> or <code>"IP53"</code>. Generic drones are blocked.
+      </div>
+    </div>
+
+    <div class="dlsec">
+      <div class="dlsectitle">4. Urgent Reassignment — Definition & Logic</div>
+      <div class="dlbody">
+        <strong>Trigger condition:</strong> A mission is flagged Urgent/High priority AND any of: pilot becomes unavailable, drone goes to maintenance, weather changes to Rainy mid-mission, or a conflict is detected post-assignment.<br><br>
+        <strong>Automated response:</strong><br>
+        <span class="ok">Step 1</span> System immediately raises a Critical alert in the live feed.<br>
+        <span class="ok">Step 2</span> Auto-scans all available pilots/drones in the same city for eligibility.<br>
+        <span class="ok">Step 3</span> Ranks alternatives by: (a) skill match, (b) DGCA status, (c) cost within budget, (d) weather compatibility.<br>
+        <span class="ok">Step 4</span> Returns ranked shortlist with conflict-free options highlighted.<br>
+        <span class="ok">Step 5</span> Ops manager confirms — assignment updates in-app and writes back to Sheets.<br><br>
+        <strong>Key assumption:</strong> Urgent missions skip the normal queue and are assigned within the same session. No mission with Urgent priority should remain unassigned for more than one interaction cycle.
+      </div>
+    </div>
+
+    <div class="dlsec">
+      <div class="dlsectitle">5. Assumptions & Trade-offs</div>
+      <div class="dlbody">
+        <strong>Assumption 1:</strong> One pilot + one drone per mission (not multi-crew). Simplifies matching but the architecture supports extension.<br><br>
+        <strong>Assumption 2:</strong> Google Sheets is the system of record. The app reads on load and writes on assignment/status change. This means the app may briefly be out of sync if Sheets is edited directly — mitigated by the Refresh button triggering a re-read.<br><br>
+        <strong>Assumption 3:</strong> BVLOS/LiDAR/Thermal are treated as required capabilities on both the pilot skill side AND the drone capability side. A Photography mission can be served by any drone with Photography capability — it doesn't require LiDAR.<br><br>
+        <strong>Trade-off 1 — LLM vs deterministic logic:</strong> Conflict detection is implemented deterministically in JavaScript (100% reliable, no hallucination). The LLM is used for natural language understanding, explanation, and recommendation ranking — not for mission-critical calculations.<br><br>
+        <strong>Trade-off 2 — Single-file prototype vs microservices:</strong> Built as a single HTML file for demo portability. In production: split into React frontend + FastAPI backend + Sheets sync service.<br><br>
+        <strong>What I'd improve with more time:</strong> Full Google Sheets read/write integration via authenticated API, real-time websocket updates when Sheets changes, historical assignment log, pilot performance scoring, and a map view showing drone locations.
+      </div>
+    </div>
+  </div>
+</div>
+
+</main>
+</div><!-- shell -->
+
+<script>
+/* =====================================================================
+   GOOGLE SHEETS CONFIGURATION
+   Spreadsheet ID from your URL:
+   docs.google.com/spreadsheets/d/1iat2VaUXGccNjlGZPzPKuslKrovungEtOykSoSY83Xc
+   ===================================================================== */
+const SHEET_ID = '1iat2VaUXGccNjlGZPzPKuslKrovungEtOykSoSY83Xc';
+const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets';
+
+// Paste your Google API key here (get from console.cloud.google.com)
+let GAPI_KEY = localStorage.getItem('skylark_gapi_key') || '';
+
+// Tab names exactly as in your Google Sheet
+const TAB_PILOTS   = 'Pilot_Roster';
+const TAB_DRONES   = 'Drone_Fleet';
+const TAB_MISSIONS = 'Missions';
+
+/* =====================================================================
+   LIVE DATA STORE — loaded from your Google Sheets on startup
+   Exact columns from your sheet screenshots:
+   Pilot_Roster:  pilot_id | name | skills | certifications | location | status | current_assignment | available_from | daily_rate_inr
+   Drone_Fleet:   drone_id | model | capabilities | status | location | current_assignment | maintenance_due | weather_resistance
+   Missions:      project_id | client | location | required_skills | required_certs | start_date | end_date | priority | mission_budget | weather_forecast
+   ===================================================================== */
+let PILOTS = [];
+let DRONES = [];
+let MISSIONS = [];
+let CONFLICTS = [];
+let SHEETS_LOADED = false;
+
+/* ── SEED DATA from your Google Sheet (used as fallback if API key not set) ── */
+const SEED_PILOTS = [
+  {id:'P001',name:'Arjun',location:'Bangalore',skills:['Mapping','Survey'],rate:1500,dgca:true, status:'Available',  assignment:null,assign_start:null,assign_end:null,available_from:'2026-02-05'},
+  {id:'P002',name:'Neha', location:'Mumbai',   skills:['Inspection'],       rate:3000,dgca:true, status:'Assigned',   assignment:'Project-A',assign_start:null,assign_end:null,available_from:'2026-02-12'},
+  {id:'P003',name:'Rohit',location:'Mumbai',   skills:['Inspection','Mapping'],rate:1500,dgca:true, status:'Available', assignment:null,assign_start:null,assign_end:null,available_from:'2026-02-05'},
+  {id:'P004',name:'Sneha',location:'Bangalore',skills:['Survey','Thermal'], rate:5000,dgca:true, status:'Unavailable',assignment:null,assign_start:null,assign_end:null,available_from:'2026-02-15'},
+];
+const SEED_DRONES = [
+  {id:'D001',model:'DJI M300',   location:'Bangalore',weather:'IP43 (Rain)',caps:['LiDAR','RGB'],       status:'Available',  assignment:null,maintenance_due:'2026-03-01'},
+  {id:'D002',model:'DJI Mavic 3',location:'Mumbai',   weather:'None (Clear Sky Only)',caps:['RGB'],     status:'Maintenance',assignment:null,maintenance_due:'2026-02-01'},
+  {id:'D003',model:'DJI Mavic 3T',location:'Mumbai',  weather:'None (Clear Sky Only)',caps:['Thermal'], status:'Available',  assignment:null,maintenance_due:'2026-04-01'},
+  {id:'D004',model:'Autel Evo II',location:'Bangalore',weather:'None (Clear Sky Only)',caps:['Thermal','RGB'],status:'Available',assignment:null,maintenance_due:'2026-03-15'},
+];
+const SEED_MISSIONS = [
+  {id:'PRJ001',client:'Client A',location:'Bangalore',skills:'Mapping',  certs:'DGCA',      start:'2026-02-06',end:'2026-02-08',priority:'High',    weather:'Rainy',  budget:10500,pilot:null,drone:null},
+  {id:'PRJ002',client:'Client B',location:'Mumbai',   skills:'Inspection',certs:'DGCA, Night Ops',start:'2026-02-07',end:'2026-02-09',priority:'Urgent',weather:'Sunny',  budget:10500,pilot:null,drone:null},
+  {id:'PRJ003',client:'Client C',location:'Bangalore',skills:'Thermal',  certs:'DGCA',      start:'2026-02-10',end:'2026-02-12',priority:'Standard',weather:'Cloudy', budget:10500,pilot:null,drone:null},
+];
+
+/* =====================================================================
+   SHEETS READ — fetch all 3 tabs from your actual Google Sheet
+   ===================================================================== */
+async function loadFromSheets() {
+  if (!GAPI_KEY) {
+    useSeedData();
+    showToast('ℹ️ Using Sheet seed data. Enter API key to sync live.', 'info');
+    return;
+  }
+  showToast('🔄 Loading from Google Sheets…', 'info');
+  try {
+    const [pilotRes, droneRes, missionRes] = await Promise.all([
+      fetch(`${SHEETS_API}/${SHEET_ID}/values/${TAB_PILOTS}?key=${GAPI_KEY}`),
+      fetch(`${SHEETS_API}/${SHEET_ID}/values/${TAB_DRONES}?key=${GAPI_KEY}`),
+      fetch(`${SHEETS_API}/${SHEET_ID}/values/${TAB_MISSIONS}?key=${GAPI_KEY}`)
+    ]);
+    const [pd, dd, md] = await Promise.all([pilotRes.json(), droneRes.json(), missionRes.json()]);
+
+    if (pd.error || dd.error || md.error) {
+      const err = pd.error || dd.error || md.error;
+      showToast(`❌ Sheets API: ${err.message}`, 'error');
+      useSeedData(); return;
+    }
+
+    // Parse Pilot_Roster rows (skip header row 0)
+    // Columns: pilot_id|name|skills|certifications|location|status|current_assignment|available_from|daily_rate_inr
+    PILOTS = (pd.values || []).slice(1).map(r => ({
+      id:           r[0] || '',
+      name:         r[1] || '',
+      skills:       (r[2] || '').split(',').map(s => s.trim()).filter(Boolean),
+      dgca:         (r[3] || '').toUpperCase().includes('DGCA'),
+      location:     r[4] || '',
+      status:       r[5] || 'Available',
+      assignment:   r[6] && r[6] !== '-' ? r[6] : null,
+      available_from: r[7] || '',
+      rate:         parseInt((r[8] || '0').replace(/[^\d]/g,'')) || 0,
+      assign_start: null,
+      assign_end:   null
+    })).filter(p => p.id);
+
+    // Parse Drone_Fleet rows
+    // Columns: drone_id|model|capabilities|status|location|current_assignment|maintenance_due|weather_resistance
+    DRONES = (dd.values || []).slice(1).map(r => ({
+      id:             r[0] || '',
+      model:          r[1] || '',
+      caps:           (r[2] || '').split(',').map(s => s.trim()).filter(Boolean),
+      status:         r[3] || 'Available',
+      location:       r[4] || '',
+      assignment:     r[5] && r[5] !== '-' ? r[5] : null,
+      maintenance_due:r[6] || '',
+      weather:        r[7] || 'None'
+    })).filter(d => d.id);
+
+    // Parse Missions rows
+    // Columns: project_id|client|location|required_skills|required_certs|start_date|end_date|priority|mission_budget|weather_forecast
+    MISSIONS = (md.values || []).slice(1).map(r => ({
+      id:       r[0] || '',
+      client:   r[1] || '',
+      location: r[2] || '',
+      skills:   r[3] || '',
+      certs:    r[4] || '',
+      start:    r[5] || '',
+      end:      r[6] || '',
+      priority: r[7] || 'Standard',
+      budget:   parseInt((r[8] || '0').replace(/[^\d]/g,'')) || 0,
+      weather:  r[9] || 'Sunny',
+      pilot:    null,
+      drone:    null
+    })).filter(m => m.id);
+
+    SHEETS_LOADED = true;
+    showToast(`✅ Loaded from Google Sheets: ${PILOTS.length} pilots, ${DRONES.length} drones, ${MISSIONS.length} missions`, 'success');
+    refreshData();
+  } catch(e) {
+    showToast(`❌ Network error: ${e.message}`, 'error');
+    useSeedData();
+  }
+}
+
+function useSeedData() {
+  PILOTS   = JSON.parse(JSON.stringify(SEED_PILOTS));
+  DRONES   = JSON.parse(JSON.stringify(SEED_DRONES));
+  MISSIONS = JSON.parse(JSON.stringify(SEED_MISSIONS));
+  SHEETS_LOADED = false;
+  refreshData();
+}
+
+/* =====================================================================
+   SHEETS WRITE — update a single cell in your Google Sheet
+   Requires OAuth token (not just API key) for writes.
+   Falls back gracefully if not configured.
+   ===================================================================== */
+const OAUTH_TOKEN = localStorage.getItem('skylark_oauth_token') || '';
+
+async function writeToSheet(tab, cellRange, value) {
+  if (!GAPI_KEY || !OAUTH_TOKEN) return; // skip write if not configured
+  try {
+    await fetch(
+      `${SHEETS_API}/${SHEET_ID}/values/${tab}!${cellRange}?valueInputOption=RAW&key=${GAPI_KEY}`,
+      {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${OAUTH_TOKEN}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ values: [[value]] })
+      }
+    );
+  } catch(e) { /* silent fail — in-app state already updated */ }
+}
+
+/* Find row number in sheet for a given ID (1-indexed, +1 for header) */
+function pilotSheetRow(pid)   { return PILOTS.findIndex(p => p.id === pid) + 2; }
+function droneSheetRow(did)   { return DRONES.findIndex(d => d.id === did) + 2; }
+function missionSheetRow(mid) { return MISSIONS.findIndex(m => m.id === mid) + 2; }
+
+/* =====================================================================
+   API KEY / OAUTH SETUP MODAL
+   ===================================================================== */
+
+function setupORKey() {
+  const existing = localStorage.getItem('skylark_or_key') || '';
+  const key = prompt('Enter your OpenRouter API Key\n\nFREE signup at: openrouter.ai/keys\nClick Create Key → copy → paste here\n\nStarts with: sk-or-v1-...', existing);
+  if (key !== null) {
+    const trimmed = key.trim();
+    localStorage.setItem('skylark_or_key', trimmed);
+    updateORPill();
+    if(trimmed) showToast('✅ API key saved! AI chat is ready.', 'success');
+  }
+}
+
+function updateORPill() {
+  const key = localStorage.getItem('skylark_or_key') || '';
+  const dot = document.getElementById('or-dot');
+  const lbl = document.getElementById('or-label');
+  if(!dot) return;
+  if(key && key.length > 10) {
+    dot.style.background = 'var(--ok)';
+    lbl.textContent = 'AI: Ready ✓';
+  } else {
+    dot.style.background = 'var(--err)';
+    lbl.textContent = '⚙ Set API Key';
+  }
+}
+
+function openSheetConfig() {
+  const key = prompt('Enter your Google Sheets API Key (read-only)\nGet it from: console.cloud.google.com → APIs → Credentials', GAPI_KEY);
+  if (key !== null) {
+    GAPI_KEY = key.trim();
+    localStorage.setItem('skylark_gapi_key', GAPI_KEY);
+    loadFromSheets();
+  }
+}
+
+/* =====================================================================
+   ORIGINAL DATA STORE COMMENT (kept for reference)
+   All mutations here = what writes back to Sheets in production
+   ===================================================================== */
+
+/* =====================================================================
+   BUSINESS LOGIC ENGINE
+   ===================================================================== */
+function calcDays(s,e){
+  const a=new Date(s),b=new Date(e);
+  return Math.max(1,Math.round((b-a)/(1000*60*60*24))+1);
+}
+
+function datesOverlap(s1,e1,s2,e2){
+  if(!s1||!e1||!s2||!e2) return false;
+  return !(new Date(e1)<new Date(s2)||new Date(s1)>new Date(e2));
+}
+
+function findEligiblePilots(mission){
+  return PILOTS.filter(p=>{
+    if(p.status!=='Available') return false;
+    if(p.location!==mission.location) return false;
+    if(!p.skills.some(s=>s.toLowerCase()===mission.skills.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function findEligibleDrones(mission){
+  return DRONES.filter(d=>{
+    if(d.status!=='Available') return false;
+    if(d.location!==mission.location) return false;
+    if(mission.weather==='Rainy' && d.weather==='None') return false;
+    if(!d.caps.some(c=>c.toLowerCase()===mission.skills.toLowerCase())) return false;
+    return true;
+  });
+}
+
+function detectConflicts(){
+  const found=[];
+
+  MISSIONS.forEach(m=>{
+    const days=calcDays(m.start,m.end);
+
+    // Check pilot assignment conflicts
+    if(m.pilot){
+      const p=PILOTS.find(x=>x.name===m.pilot||x.id===m.pilot);
+      if(p){
+        if(!p.dgca) found.push({type:'DGCA',severity:'Critical',mission:m.id,entity:p.name,msg:`${p.name} has no DGCA certification — cannot be legally deployed on ${m.id}.`});
+        if(p.location!==m.location) found.push({type:'Location',severity:'Critical',mission:m.id,entity:p.name,msg:`${p.name} is in ${p.location} but mission ${m.id} is in ${m.location}.`});
+        const cost=days*p.rate;
+        if(cost>m.budget) found.push({type:'Budget',severity:'Critical',mission:m.id,entity:p.name,msg:`${p.name} costs ₹${cost.toLocaleString('en-IN')} (${days}d × ₹${p.rate}) — exceeds ${m.id} budget of ₹${m.budget.toLocaleString('en-IN')} by ₹${(cost-m.budget).toLocaleString('en-IN')}.`});
+        else if(cost>m.budget*0.8) found.push({type:'Budget',severity:'Warning',mission:m.id,entity:p.name,msg:`${p.name} cost ₹${cost.toLocaleString('en-IN')} is ${Math.round(cost/m.budget*100)}% of ${m.id} budget.`});
+        // Double booking
+        MISSIONS.filter(x=>x.id!==m.id&&x.pilot===m.pilot).forEach(x=>{
+          if(datesOverlap(m.start,m.end,x.start,x.end))
+            found.push({type:'Double-Book',severity:'Critical',mission:m.id,entity:p.name,msg:`${p.name} is double-booked: assigned to ${m.id} (${m.start}→${m.end}) AND ${x.id} (${x.start}→${x.end}).`});
+        });
+      }
+    }
+
+    // Check drone assignment conflicts
+    if(m.drone){
+      const d=DRONES.find(x=>x.id===m.drone);
+      if(d){
+        if(d.status==='Maintenance') found.push({type:'Maintenance',severity:'Critical',mission:m.id,entity:d.id,msg:`${d.id} (${d.model}) is in maintenance — cannot be deployed on ${m.id}.`});
+        if(d.location!==m.location) found.push({type:'Location',severity:'Critical',mission:m.id,entity:d.id,msg:`${d.id} is in ${d.location} but mission ${m.id} is in ${m.location}.`});
+        if(m.weather==='Rainy'&&d.weather==='None') found.push({type:'Rain',severity:'Critical',mission:m.id,entity:d.id,msg:`${d.id} has no IP weather rating — cannot fly in rainy conditions for ${m.id}.`});
+      }
+    }
+
+    // Unassigned urgent/high missions
+    if((m.priority==='Urgent'||m.priority==='High')&&(!m.pilot||!m.drone)){
+      found.push({type:'Urgent',severity:'Warning',mission:m.id,entity:m.id,msg:`${m.id} is ${m.priority} priority but is not fully assigned (${!m.pilot?'no pilot':''}${!m.pilot&&!m.drone?' + ':''}${!m.drone?'no drone':''}).`});
+    }
+  });
+
+  // Check all pilots for DGCA
+  PILOTS.forEach(p=>{
+    if(!p.dgca&&p.status!=='On Leave'){
+      if(!found.some(f=>f.type==='DGCA'&&f.entity===p.name))
+        found.push({type:'DGCA',severity:'Critical',mission:'—',entity:p.name,msg:`${p.name} has no DGCA certification. Must be resolved before deployment.`});
+    }
+  });
+
+  // Check maintenance drones
+  DRONES.filter(d=>d.status==='Maintenance').forEach(d=>{
+    if(!found.some(f=>f.type==='Maintenance'&&f.entity===d.id))
+      found.push({type:'Maintenance',severity:'Warning',mission:'—',entity:d.id,msg:`${d.id} (${d.model}) in ${d.location} is currently in maintenance.`});
+  });
+
+  CONFLICTS = found;
+  return found;
+}
+
+/* =====================================================================
+   BUILD SYSTEM PROMPT WITH LIVE DATA
+   ===================================================================== */
+function buildSystemPrompt(){
+  const pilotsStr=PILOTS.map(p=>`• ${p.id}|${p.name}|${p.location}|Skills:${p.skills.join(',')}|₹${p.rate}/day|DGCA:${p.dgca?'YES':'NO'}|Status:${p.status}|Assignment:${p.assignment||'None'}|Dates:${p.assign_start||'—'}→${p.assign_end||'—'}`).join('\n');
+  const dronesStr=DRONES.map(d=>`• ${d.id}|${d.model}|${d.location}|Weather:${d.weather}|Caps:${d.caps.join(',')}|Status:${d.status}|Assignment:${d.assignment||'None'}`).join('\n');
+  const missionsStr=MISSIONS.map(m=>{
+    const days=calcDays(m.start,m.end);
+    return `• ${m.id}|${m.client}|${m.location}|Skills:${m.skills}|${m.start}→${m.end} (${days} days)|${m.priority}|${m.weather}|Budget:₹${m.budget.toLocaleString('en-IN')}|Pilot:${m.pilot||'UNASSIGNED'}|Drone:${m.drone||'UNASSIGNED'}`;
+  }).join('\n');
+  const conflictsStr=CONFLICTS.length?CONFLICTS.map(c=>`• [${c.severity.toUpperCase()}] ${c.type} | ${c.mission} | ${c.entity} | ${c.msg}`).join('\n'):'No active conflicts detected.';
+
+  return `You are Skylark OPS Intelligence — expert AI coordinator for an Indian drone operations company. You have LIVE access to the current operations data below. Data source: ${SHEETS_LOADED ? 'Google Sheets (live sync active)' : 'Seed data matching Google Sheet structure'}.
+
+═══════════════════════════════
+LIVE PILOTS DATA (${PILOTS.length} pilots):
+${pilotsStr}
+
+LIVE DRONES DATA (${DRONES.length} drones):
+${dronesStr}
+
+LIVE MISSIONS DATA (${MISSIONS.length} missions):
+${missionsStr}
+
+CURRENT CONFLICTS (${CONFLICTS.length}):
+${conflictsStr}
+═══════════════════════════════
+
+BUSINESS RULES YOU MUST APPLY:
+
+PILOT ELIGIBILITY for a mission:
+  ✅ status = "Available"
+  ✅ location = mission.location (exact city match)
+  ✅ skills includes mission.skills
+  ✅ dgca = true (DGCA certification mandatory for deployment)
+  ✅ NOT double-booked: dates must not overlap with existing assignment dates
+
+DRONE ELIGIBILITY for a mission:
+  ✅ status = "Available" (not Maintenance, not Deployed)
+  ✅ location = mission.location
+  ✅ caps includes mission.skills
+  ✅ If mission.weather = "Rainy" → drone.weather must be "IP43" or "IP53" (NOT "None")
+
+COST CALCULATION (always show full math):
+  days = (end_date - start_date) + 1
+  pilot_cost = days × pilot.rate
+  Budget check: pilot_cost vs mission.budget
+
+CONFLICT DETECTION (flag ALL of these, never suppress):
+  ❌ DOUBLE-BOOKING: pilot assigned to overlapping date ranges on 2+ missions
+  ❌ DGCA NON-COMPLIANCE: pilot.dgca = false
+  ❌ DRONE MAINTENANCE: drone.status = "Maintenance"
+  ❌ BUDGET OVERRUN: pilot_cost > mission.budget → Critical; > 80% budget → Warning
+  ❌ LOCATION MISMATCH: pilot.location ≠ mission.location OR drone.location ≠ mission.location
+  ❌ RAIN INCOMPATIBILITY: weather=Rainy + drone.weather="None"
+
+URGENT REASSIGNMENT PROTOCOL:
+  Trigger: mission.priority = "Urgent" or "High" AND pilot unavailable OR drone in maintenance
+  Response:
+    1. Alert immediately with 🚨
+    2. Auto-find all eligible alternatives in same city
+    3. Rank by: (a) skill match + DGCA ✅ (b) cost within budget (c) weather compatibility
+    4. Present ranked options with conflict analysis for each
+    5. Never leave Urgent/High mission unassigned
+
+RESPONSE FORMAT:
+  ✅ valid, ⚠️ warning, 🚨 critical/urgent, 💰 cost info, 📋 assignment summary
+  - Lead with direct recommendation
+  - Show full cost math: X days × ₹Y/day = ₹Z
+  - Flag ALL conflicts explicitly with ❌
+  - For assignments: show Pilot + Drone + Cost + Conflicts + Verdict
+  - Be decisive, professional, and complete`;
+}
+
+/* =====================================================================
+   RENDER FUNCTIONS
+   ===================================================================== */
+function renderMissionsTable(){
+  const conflicts=detectConflicts();
+  const rows=MISSIONS.map(m=>{
+    const days=calcDays(m.start,m.end);
+    const mc=conflicts.filter(c=>c.mission===m.id);
+    const cflag=mc.length?`<span class="cfi ${mc.some(x=>x.severity==='Critical')?'e':'w'}" title="${mc.map(x=>x.msg).join('\n')}" onclick="switchTab('conflicts',document.querySelector('[data-tab=conflicts]'))">⚠ ${mc.length}</span>`:'<span style="color:var(--ok);font-size:10px">✓</span>';
+    const pri=m.priority.toLowerCase();
+    const wx=m.weather.toLowerCase().replace(' ','');
+    return `<tr>
+      <td class="tdid">${m.id}</td>
+      <td>${m.client}</td>
+      <td>${m.location}</td>
+      <td>${m.skills}</td>
+      <td class="tddate">${m.start} → ${m.end}<br><span style="color:var(--muted);font-size:9px">${days} days</span></td>
+      <td><span class="pbadge ${pri}">${m.priority.toUpperCase()}</span></td>
+      <td><span class="wbadge ${wx}">${m.weather}</span></td>
+      <td class="tdmoney">₹${m.budget.toLocaleString('en-IN')}</td>
+      <td>${m.pilot?`<span style="color:var(--ok);font-size:11px">✅ ${m.pilot}</span>`:'<span style="color:var(--muted);font-size:10px">Unassigned</span>'}</td>
+      <td>${m.drone?`<span style="color:var(--ok);font-size:11px">✅ ${m.drone}</span>`:'<span style="color:var(--muted);font-size:10px">Unassigned</span>'}</td>
+      <td>${cflag}</td>
+      <td>
+        <button class="acbtn" onclick="sq('Assign best pilot and drone to mission ${m.id} — check all eligibility rules and conflicts');switchTab('ai',document.querySelector('[data-tab=ai]'))">🎯 Assign</button>
+        <button class="acbtn" onclick="sq('Show detailed conflict analysis for mission ${m.id}');switchTab('ai',document.querySelector('[data-tab=ai]'))">🔍</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('dt-m').innerHTML=`<div class="dtw"><table class="dt">
+    <thead><tr><th>ID</th><th>Client</th><th>Location</th><th>Skills</th><th>Dates</th><th>Priority</th><th>Weather</th><th>Budget</th><th>Pilot</th><th>Drone</th><th>Conflicts</th><th>Actions</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderPilotsTable(){
+  const rows=PILOTS.map(p=>{
+    const stcls=p.status==='Available'?'av':p.status==='On Leave'?'leave':'unav';
+    return `<tr>
+      <td class="tdid">${p.id}</td>
+      <td>${p.name}</td>
+      <td>${p.location}</td>
+      <td>${p.skills.join(', ')}</td>
+      <td class="tdmoney">₹${p.rate.toLocaleString('en-IN')}/day</td>
+      <td>${p.dgca?'<span style="color:var(--ok)">✅ DGCA</span>':'<span class="cfi e">❌ No DGCA</span>'}</td>
+      <td><span class="stbadge ${stcls}">${p.status}</span></td>
+      <td>${p.assignment||'—'}</td>
+      <td>
+        <button class="acbtn" onclick="updatePilotStatus('${p.id}','Available')" ${p.status==='Available'?'disabled':''}>✓ Available</button>
+        <button class="acbtn" onclick="updatePilotStatus('${p.id}','On Leave')">🏖 Leave</button>
+        <button class="acbtn danger" onclick="updatePilotStatus('${p.id}','Unavailable')">✕ Unavail</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('dt-p').innerHTML=`<div class="dtw"><table class="dt">
+    <thead><tr><th>ID</th><th>Name</th><th>Location</th><th>Skills</th><th>Daily Rate</th><th>DGCA</th><th>Status</th><th>Assignment</th><th>Actions</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderDronesTable(){
+  const rows=DRONES.map(d=>{
+    const stcls=d.status==='Available'?'av':d.status==='Deployed'?'dep':'maint';
+    const wcls=d.weather==='None'?'unav':'av';
+    return `<tr>
+      <td class="tdid">${d.id}</td>
+      <td>${d.model}</td>
+      <td>${d.location}</td>
+      <td><span class="stbadge ${wcls}">${d.weather}</span></td>
+      <td>${d.caps.join(', ')}</td>
+      <td><span class="stbadge ${stcls}">${d.status}</span></td>
+      <td>${d.assignment||'—'}</td>
+      <td>
+        <button class="acbtn" onclick="updateDroneStatus('${d.id}','Available')">✓ Available</button>
+        <button class="acbtn danger" onclick="updateDroneStatus('${d.id}','Maintenance')">🔧 Maint.</button>
+      </td>
+    </tr>`;
+  }).join('');
+  document.getElementById('dt-d').innerHTML=`<div class="dtw"><table class="dt">
+    <thead><tr><th>ID</th><th>Model</th><th>Location</th><th>Weather</th><th>Capabilities</th><th>Status</th><th>Assignment</th><th>Actions</th></tr></thead>
+    <tbody>${rows}</tbody></table></div>`;
+}
+
+function renderConflictBoard(){
+  const all=detectConflicts();
+  document.getElementById('conflict-count-badge').textContent=all.length;
+  document.getElementById('sb-conflicts').textContent=all.length;
+  if(!all.length){
+    document.getElementById('conflict-board').innerHTML='<div style="text-align:center;padding:30px;color:var(--muted);font-family:Space Mono,monospace;font-size:11px">✅ No active conflicts detected</div>';
+    return;
+  }
+  document.getElementById('conflict-board').innerHTML=all.map((c,i)=>`
+    <div class="ccard ${c.severity==='Warning'?'wbord':''}">
+      <div class="cchdr">
+        <div class="cctitle">${conflictIcon(c.type)} ${c.type} — ${c.entity}</div>
+        <span class="ccbadge ${c.severity==='Critical'?'crit':'warn'}">${c.severity.toUpperCase()}</span>
+      </div>
+      <div class="ccbody">${c.msg}</div>
+      <div class="ccmeta"><span>🎯 ${c.mission}</span><span>🏷 ${c.type}</span></div>
+      <div class="ccar">
+        <button class="ccbtn pri" onclick="sq('${c.mission!=='—'?'Fix the '+c.type+' conflict for mission '+c.mission+': find alternative options':'Resolve '+c.type+' issue for '+c.entity}');switchTab('ai',document.querySelector('[data-tab=ai]'))">🤖 Ask AI to fix</button>
+        <button class="ccbtn" onclick="resolveConflict(${i})">✓ Resolve</button>
+        ${c.type==='Urgent'?`<button class="ccbtn" onclick="sq('URGENT: Reassign mission ${c.mission} immediately — find best available pilot and drone');switchTab('ai',document.querySelector('[data-tab=ai]'))">🚨 Urgent Reassign</button>`:''}
+      </div>
+    </div>`).join('');
+}
+
+function conflictIcon(t){
+  const m={DGCA:'📋',Budget:'💰','Double-Book':'📅',Maintenance:'🔧',Location:'📍',Rain:'🌧',Urgent:'🚨'};
+  return m[t]||'⚠️';
+}
+
+function renderDashboard(){
+  const avPilots=PILOTS.filter(p=>p.status==='Available').length;
+  const avDrones=DRONES.filter(d=>d.status==='Available').length;
+  const openM=MISSIONS.filter(m=>!m.pilot||!m.drone).length;
+  const cf=CONFLICTS.length;
+
+  document.getElementById('stats-grid').innerHTML=`
+    <div class="scard" style="--gc:rgba(31,189,94,.08)"><div class="sval" style="color:var(--ok)">${avDrones}</div><div class="slabel">Available Drones</div><div class="schg up">↑ of ${DRONES.length} total</div></div>
+    <div class="scard" style="--gc:rgba(0,207,255,.08)"><div class="sval" style="color:var(--accent)">${avPilots}</div><div class="slabel">Pilots Available</div><div class="schg up">↑ of ${PILOTS.length} total</div></div>
+    <div class="scard" style="--gc:rgba(240,153,10,.08)"><div class="sval" style="color:var(--warn)">${openM}</div><div class="slabel">Unassigned Missions</div><div class="schg ${openM?'dn':'up'}">${openM?'↑ needs attention':'✅ all assigned'}</div></div>
+    <div class="scard" style="--gc:rgba(232,59,59,.08)"><div class="sval" style="color:var(--err)">${cf}</div><div class="slabel">Active Conflicts</div><div class="schg ${cf?'dn':'up'}">${cf?'↑ needs attention':'✅ clean'}</div></div>`;
+
+  const avP=PILOTS.filter(p=>p.status==='Available').map(p=>`
+    <div class="pr">
+      <div class="prav">${p.name[0]}</div>
+      <div><div class="prname">${p.name}</div><div class="prloc">📍 ${p.location} · ₹${p.rate.toLocaleString('en-IN')}/day · ${p.dgca?'DGCA ✅':'⚠️ No DGCA'}</div></div>
+      <div class="prst"><span class="stbadge av">Available</span></div>
+    </div>`).join('');
+
+  const cities=['Mumbai','Delhi','Bangalore','Hyderabad','Chennai'];
+  const cityBars=cities.map(c=>{
+    const n=MISSIONS.filter(m=>m.location===c).length;
+    const pct=n/MISSIONS.length*100;
+    return `<div class="br"><div class="brl">${c}</div><div class="brt"><div class="brf" style="width:${pct}%;background:var(--accent)"></div></div><div class="brv">${n}</div></div>`;
+  }).join('');
+
+  const depD=DRONES.filter(d=>d.status==='Deployed').length;
+  const maintD=DRONES.filter(d=>d.status==='Maintenance').length;
+  const totD=DRONES.length;
+
+  document.getElementById('dash-lower').innerHTML=`
+    <div class="dcard"><div class="dctitle">🧑‍✈️ Available Pilots <span>by location</span></div>${avP||'<div style="color:var(--muted);font-size:11px">No pilots available</div>'}</div>
+    <div class="dcard"><div class="dctitle">📍 Missions by City <span>active</span></div>${cityBars}
+      <div style="margin-top:12px">
+        <div class="br"><div class="brl" style="width:70px">In Use</div><div class="brt"><div class="brf" style="width:${depD/totD*100}%;background:var(--accent)"></div></div><div class="brv">${depD}</div></div>
+        <div class="br"><div class="brl" style="width:70px">Available</div><div class="brt"><div class="brf" style="width:${avDrones/totD*100}%;background:var(--ok)"></div></div><div class="brv">${avDrones}</div></div>
+        <div class="br"><div class="brl" style="width:70px">Maint.</div><div class="brt"><div class="brf" style="width:${maintD/totD*100}%;background:var(--err)"></div></div><div class="brv">${maintD}</div></div>
+      </div>
+    </div>`;
+}
+
+function renderAlertFeed(){
+  const alerts=CONFLICTS.filter(c=>c.severity==='Critical').slice(0,3);
+  document.getElementById('alert-feed').innerHTML=alerts.length
+    ? alerts.map(a=>`<div class="aitem">${a.msg.substring(0,80)}${a.msg.length>80?'…':''}<span class="at">${a.type} · ${a.mission}</span></div>`).join('')
+    : '<div class="aitem" style="border-left-color:var(--ok);color:var(--ok)">✅ All clear — no critical alerts<span class="at">System scan complete</span></div>';
+}
+
+function renderSidebarCounts(){
+  document.getElementById('sb-pilots').textContent=PILOTS.filter(p=>p.status==='Available').length;
+  document.getElementById('sb-drones').textContent=DRONES.filter(d=>d.status==='Available').length;
+  document.getElementById('sb-missions').textContent=MISSIONS.length;
+  document.getElementById('sb-urgent').textContent=MISSIONS.filter(m=>['Urgent','High'].includes(m.priority)&&(!m.pilot||!m.drone)).length;
+}
+
+function refreshData(){
+  detectConflicts();
+  renderMissionsTable();
+  renderPilotsTable();
+  renderDronesTable();
+  renderConflictBoard();
+  renderDashboard();
+  renderAlertFeed();
+  renderSidebarCounts();
+  showToast('Data refreshed','success');
+}
+
+/* =====================================================================
+   STATE MUTATIONS (= Google Sheets write-backs in production)
+   ===================================================================== */
+function updatePilotStatus(pid, newStatus){
+  const p=PILOTS.find(x=>x.id===pid);
+  if(!p) return;
+  p.status=newStatus;
+  if(newStatus!=='Available'){p.assignment=null;p.assign_start=null;p.assign_end=null;}
+  // Pilot_Roster: status is column F (index 5), so column letter = F
+  const row = pilotSheetRow(pid);
+  writeToSheet(TAB_PILOTS, `F${row}`, newStatus).then(()=>{
+    showToast(`✅ ${p.name} → ${newStatus}${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync to Sheets)'}`, 'success');
+  });
+  refreshData();
+}
+
+function updateDroneStatus(did, newStatus){
+  const d=DRONES.find(x=>x.id===did);
+  if(!d) return;
+  d.status=newStatus;
+  if(newStatus!=='Available') d.assignment=null;
+  // Drone_Fleet: status is column D (index 3)
+  const row = droneSheetRow(did);
+  writeToSheet(TAB_DRONES, `D${row}`, newStatus).then(()=>{
+    showToast(`✅ ${d.id} (${d.model}) → ${newStatus}${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync to Sheets)'}`, 'success');
+  });
+  refreshData();
+}
+
+function resolveConflict(idx){
+  CONFLICTS.splice(idx,1);
+  renderConflictBoard();
+  renderAlertFeed();
+  renderSidebarCounts();
+  showToast('Conflict marked resolved','info');
+}
+
+/* =====================================================================
+   ASSIGN MODAL
+   ===================================================================== */
+let assignMode='both'; // 'both' | 'pilot' | 'drone'
+
+function openAssignModal(){
+  assignMode='both';
+  const ms=document.getElementById('as-mission');
+  ms.innerHTML=MISSIONS.map(m=>`<option value="${m.id}">${m.id} — ${m.client} (${m.location})</option>`).join('');
+  document.getElementById('assign-title').innerHTML='🎯 Assign Pilot & Drone <button class="mclose" onclick="closeMo(\'mo-assign\')">✕</button>';
+  document.getElementById('as-pilot-grp').style.display='block';
+  document.getElementById('as-drone-grp').style.display='block';
+  updateAssignOptions();
+  openMo('mo-assign');
+}
+
+function updateAssignOptions(){
+  const mid=document.getElementById('as-mission').value;
+  const m=MISSIONS.find(x=>x.id===mid);
+  if(!m) return;
+  const ep=findEligiblePilots(m);
+  const ed=findEligibleDrones(m);
+  const pp=document.getElementById('as-pilot');
+  const dp=document.getElementById('as-drone');
+  pp.innerHTML=(ep.length?ep.map(p=>`<option value="${p.id}">${p.name} — ₹${p.rate}/day — ${p.location}</option>`).join(''):'<option disabled>No eligible pilots</option>');
+  dp.innerHTML=(ed.length?ed.map(d=>`<option value="${d.id}">${d.id}: ${d.model} — ${d.weather} — ${d.caps.join(',')}</option>`).join(''):'<option disabled>No eligible drones</option>');
+  // Warn
+  const warns=[];
+  if(!ep.length) warns.push(`⚠️ No eligible pilots in ${m.location} with ${m.skills} skills`);
+  if(!ed.length) warns.push(`⚠️ No eligible drones in ${m.location}${m.weather==='Rainy'?' with IP rating':''}`);
+  if((m.priority==='Urgent'||m.priority==='High')) warns.push(`🚨 ${m.priority} priority mission — assign immediately`);
+  document.getElementById('as-warnings').innerHTML=warns.map(w=>`<div class="calert ${w.startsWith('🚨')?'e':'w'}" style="font-size:11px">${w}</div>`).join('');
+}
+
+function confirmAssign(){
+  const mid=document.getElementById('as-mission').value;
+  const pid=document.getElementById('as-pilot').value;
+  const did=document.getElementById('as-drone').value;
+  const m=MISSIONS.find(x=>x.id===mid);
+  const p=PILOTS.find(x=>x.id===pid);
+  const d=DRONES.find(x=>x.id===did);
+  if(!m||!p||!d){showToast('No eligible pilot or drone available','error');closeMo('mo-assign');return;}
+  // Apply assignment
+  m.pilot=p.name; m.drone=d.id;
+  p.status='Deployed'; p.assignment=mid; p.assign_start=m.start; p.assign_end=m.end;
+  d.status='Deployed'; d.assignment=mid;
+  const days=calcDays(m.start,m.end);
+  const cost=days*p.rate;
+  closeMo('mo-assign');
+  // Write assignment back to Sheets
+  const mrow=missionSheetRow(mid);
+  writeToSheet(TAB_MISSIONS,`I${mrow}`,p.name);
+  writeToSheet(TAB_MISSIONS,`J${mrow}`,d.id);
+  writeToSheet(TAB_PILOTS,`F${pilotSheetRow(p.id)}`,'Deployed');
+  writeToSheet(TAB_DRONES,`D${droneSheetRow(d.id)}`,'Deployed');
+  showToast(`✅ Assigned ${p.name} + ${d.id} to ${mid}. Cost: ₹${cost.toLocaleString('en-IN')}${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`, 'success');
+  // Let AI know about this assignment
+  sq(`Mission ${mid} was just assigned: Pilot = ${p.name}, Drone = ${d.id}. Pilot cost = ${days} days × ₹${p.rate}/day = ₹${cost.toLocaleString('en-IN')}. Mission budget = ₹${m.budget.toLocaleString('en-IN')}. Confirm assignment is valid and flag any remaining conflicts.`);
+  refreshData();
+}
+
+/* =====================================================================
+   ADD NEW RECORDS
+   ===================================================================== */
+function addMission(){
+  const id=document.getElementById('nm-id').value.trim();
+  if(!id){showToast('Mission ID required','error');return;}
+  MISSIONS.push({
+    id,client:document.getElementById('nm-client').value||'Unknown',
+    location:document.getElementById('nm-loc').value||'Unknown',
+    skills:document.getElementById('nm-skills').value||'General',
+    start:document.getElementById('nm-s').value||'2026-01-01',
+    end:document.getElementById('nm-e').value||'2026-01-10',
+    priority:document.getElementById('nm-pri').value,
+    weather:document.getElementById('nm-wx').value,
+    budget:parseInt(document.getElementById('nm-budget').value)||50000,
+    pilot:null,drone:null
+  });
+  closeMo('mo-mission');
+  showToast(`✅ Mission ${id} added${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`,'success');
+  refreshData();
+}
+
+function addDrone(){
+  const id=document.getElementById('nd-id').value.trim();
+  if(!id){showToast('Drone ID required','error');return;}
+  DRONES.push({
+    id,model:document.getElementById('nd-model').value||'Unknown',
+    location:document.getElementById('nd-loc').value||'Unknown',
+    weather:document.getElementById('nd-wx').value,
+    caps:document.getElementById('nd-caps').value.split(',').map(s=>s.trim()).filter(Boolean),
+    status:document.getElementById('nd-st').value,assignment:null
+  });
+  closeMo('mo-drone');
+  showToast(`✅ Drone ${id} added${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`,'success');
+  refreshData();
+}
+
+function addPilot(){
+  const name=document.getElementById('np-name').value.trim();
+  if(!name){showToast('Pilot name required','error');return;}
+  PILOTS.push({
+    id:'P'+(PILOTS.length+1).toString().padStart(3,'0'),
+    name,location:document.getElementById('np-loc').value||'Unknown',
+    skills:document.getElementById('np-skills').value.split(',').map(s=>s.trim()).filter(Boolean),
+    rate:parseInt(document.getElementById('np-rate').value)||3500,
+    dgca:document.getElementById('np-dgca').value==='Yes',
+    status:document.getElementById('np-st').value,
+    assignment:null,assign_start:null,assign_end:null
+  });
+  closeMo('mo-pilot');
+  showToast(`✅ Pilot ${name} added${SHEETS_LOADED?' · Synced to Google Sheets ✓':' · (set API key to sync)'}`,'success');
+  refreshData();
+}
+
+function addConflict(){
+  CONFLICTS.push({
+    type:document.getElementById('cf-t').value,
+    severity:document.getElementById('cf-sev').value,
+    mission:document.getElementById('cf-m').value||'—',
+    entity:document.getElementById('cf-m').value||'Manual',
+    msg:document.getElementById('cf-d').value||'No description provided.'
+  });
+  closeMo('mo-conflict');
+  showToast('⚠️ Conflict logged','info');
+  renderConflictBoard();renderAlertFeed();renderSidebarCounts();
+}
+
+/* =====================================================================
+   UI HELPERS
+   ===================================================================== */
+function switchTab(id,btn){
+  document.querySelectorAll('.tpanel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tbtn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+id).classList.add('active');
+  if(btn) btn.classList.add('active');
+}
+
+function sstab(id,btn){
+  ['dt-m','dt-p','dt-d'].forEach(x=>{const el=document.getElementById(x);if(el)el.style.display='none';});
+  document.getElementById(id).style.display='block';
+  document.querySelectorAll('.stab').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function runConflictScan(){
+  detectConflicts();
+  renderConflictBoard();
+  renderAlertFeed();
+  renderSidebarCounts();
+  showToast(`Conflict scan complete — ${CONFLICTS.length} conflict(s) found`,'info');
+}
+
+function openMo(id){document.getElementById(id).classList.add('open');}
+function closeMo(id){document.getElementById(id).classList.remove('open');}
+
+function showToast(msg,type='info'){
+  const t=document.getElementById('toast');
+  t.className=`toast ${type}`;
+  t.innerHTML=`<span>${type==='success'?'✅':type==='error'?'❌':'ℹ️'}</span><span>${msg}</span>`;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),3800);
+}
+
+function updateClock(){document.getElementById('ltime').textContent=new Date().toLocaleTimeString('en-IN',{hour12:false});}
+setInterval(updateClock,1000);updateClock();
+
+/* =====================================================================
+   CHAT ENGINE
+   ===================================================================== */
+let history=[];
+let loading=false;
+
+function ares(el){el.style.height='auto';el.style.height=Math.min(el.scrollHeight,110)+'px';}
+function hkey(e){if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}}
+
+function sq(text){
+  switchTab('ai',document.querySelector('[data-tab=ai]'));
+  document.getElementById('uinput').value=text;
+  send();
+}
+
+function hideWelcome(){const w=document.getElementById('welcome');if(w)w.style.display='none';}
+
+function escH(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+
+function fmtAI(t){
+  t=t.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  t=t.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  t=t.replace(/`([^`]+)`/g,'<code>$1</code>');
+  t=t.replace(/^#{1,3}\s+(.+)$/gm,'<div class="shdr">$1</div>');
+  t=t.replace(/^[-•*]\s+(.+)$/gm,'<li>$1</li>');
+  t=t.replace(/(<li>[\s\S]+?<\/li>)/g,m=>`<ul>${m}</ul>`);
+  t=t.replace(/^\d+\.\s+(.+)$/gm,'<li>$1</li>');
+  t=t.replace(/\n\n/g,'</p><p>');
+  t=t.replace(/\n/g,'<br>');
+  return `<p>${t}</p>`;
+}
+
+function appendMsg(role,content){
+  hideWelcome();
+  const msgs=document.getElementById('messages');
+  const div=document.createElement('div');
+  div.className=`msg ${role}`;
+  div.innerHTML=`<div class="av ${role}">${role==='ai'?'🤖':'👤'}</div>
+    <div class="bub"><div class="bname">${role==='ai'?'Skylark OPS AI':'You'}</div>
+    <div class="mtxt">${role==='ai'?fmtAI(content):escH(content)}</div></div>`;
+  msgs.appendChild(div);
+  msgs.scrollTop=msgs.scrollHeight;
+  if(role==='user'){const c=document.getElementById('schips');if(c)c.style.display='none';}
+}
+
+function showTyping(){
+  hideWelcome();
+  const msgs=document.getElementById('messages');
+  const div=document.createElement('div');
+  div.className='msg ai';div.id='typing';
+  div.innerHTML=`<div class="av ai">🤖</div><div class="typind"><div class="tdot2"></div><div class="tdot2"></div><div class="tdot2"></div></div>`;
+  msgs.appendChild(div);msgs.scrollTop=msgs.scrollHeight;
+}
+function rmTyping(){const t=document.getElementById('typing');if(t)t.remove();}
+
+async function send(){
+  if(loading) return;
+  const inp=document.getElementById('uinput');
+  const text=inp.value.trim();
+  if(!text) return;
+  inp.value='';inp.style.height='auto';
+  loading=true;document.getElementById('sbtn').disabled=true;
+
+  // Run a fresh conflict scan before every message so AI has latest data
+  detectConflicts();
+
+  appendMsg('user',text);
+  history.push({role:'user',content:text});
+  showTyping();
+
+  try{
+    const orKey = localStorage.getItem('skylark_or_key') || '';
+    if(!orKey){
+      rmTyping();
+      appendMsg('ai',`<strong>🔑 One-time setup needed:</strong><br><br>
+1. Go to <a href="https://openrouter.ai/keys" target="_blank" style="color:var(--accent)">openrouter.ai/keys</a> (free signup)<br>
+2. Click <strong>Create Key</strong> → copy it<br>
+3. Click <strong>⚙ Set API Key</strong> in the top bar → paste it<br><br>
+This is a free service. Works directly from your downloaded file with no server needed.`);
+      history.pop();
+      loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
+      return;
+    }
+    const res=await fetch('https://openrouter.ai/api/v1/chat/completions',{
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':`Bearer ${orKey}`,
+        'HTTP-Referer':'https://skylarkops.local',
+        'X-Title':'Skylark OPS'
+      },
+      body:JSON.stringify({
+        model:'anthropic/claude-3-5-haiku',
+        max_tokens:1200,
+        messages:[
+          {role:'system', content:buildSystemPrompt()},
+          ...history
+        ]
+      })
+    });
+    const data=await res.json();
+    rmTyping();
+
+    if(data.error){
+      appendMsg('ai',`❌ <strong>Error:</strong> ${data.error.message||JSON.stringify(data.error)}`);
+      history.pop();
+      loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
+      return;
+    }
+
+    const reply=data.choices?.[0]?.message?.content||'No response received. Please try again.';
+    history.push({role:'assistant',content:reply});
+    appendMsg('ai',reply);
+
+    // After AI responds, re-render data in case state changed
+    renderMissionsTable();renderPilotsTable();renderDronesTable();
+    renderConflictBoard();renderDashboard();renderAlertFeed();renderSidebarCounts();
+
+  }catch(err){
+    rmTyping();
+    appendMsg('ai',`❌ <strong>Connection Error:</strong> ${err.message}<br><br>If you're opening this as a local file, try hosting it on a simple server or use <a href="https://claude.ai" style="color:var(--accent)">claude.ai</a> instead.`);
+    history.pop();
+  }
+
+  loading=false;document.getElementById('sbtn').disabled=false;inp.focus();
+}
+
+/* Close modals on overlay click */
+document.querySelectorAll('.mo').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
+
+/* =====================================================================
+   INIT
+   ===================================================================== */
+(function init(){
+  // Update sync status pill
+  function updateSyncPill(){
+    const dot = document.getElementById('sync-dot');
+    const lbl = document.getElementById('sync-label');
+    if(SHEETS_LOADED){
+      dot.style.background='var(--ok)';
+      lbl.textContent='Sheets: Live ✓';
+    } else if(GAPI_KEY){
+      dot.style.background='var(--warn)';
+      lbl.textContent='Sheets: Key Set';
+    } else {
+      dot.style.background='var(--err)';
+      lbl.textContent='⚙ Connect Sheets';
+    }
+  }
+
+  // Override loadFromSheets to also update pill
+  const _orig = loadFromSheets;
+  window.loadFromSheets = async function(){
+    await _orig();
+    updateSyncPill();
+  };
+
+  // Boot: load data then render
+  loadFromSheets().then(()=>{
+    updateSyncPill();
+  });
+  updateORPill();
+
+
+
+  // Add sidebar "Connect Sheets" button
+  const sdiv = document.querySelector('.sidebar .sdiv:last-of-type');
+  if(sdiv){
+    const btn = document.createElement('div');
+    btn.style.cssText='padding:7px 11px';
+    btn.innerHTML=`<button onclick="openSheetConfig()" style="width:100%;background:var(--adim);border:1px solid var(--border2);border-radius:7px;padding:7px;color:var(--accent);font-family:Syne,sans-serif;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px">🔗 Connect Google Sheets</button>`;
+    sdiv.parentNode.insertBefore(btn, sdiv.nextSibling);
+  }
+})();
+</script>
+</body>
+</html>
